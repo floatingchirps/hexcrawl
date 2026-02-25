@@ -1,0 +1,27 @@
+# fly.toml - Fly.io deployment configuration
+# Replace "your-app-name" with your chosen app name
+
+app = "your-app-name"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "3000"
+  DB_PATH = "/data/hexcrawl.db"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[mounts]]
+  source = "hexcrawl_data"
+  destination = "/data"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -1,0 +1,22 @@
+# render.yaml - Render.com deployment configuration
+# This file is optional; you can also configure via the Render dashboard.
+
+services:
+  - type: web
+    name: hexcrawl
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: PLAYER_PASSWORD
+        sync: false  # Set this in the Render dashboard
+      - key: DM_PASSWORD
+        sync: false  # Set this in the Render dashboard
+      - key: DB_PATH
+        value: /data/hexcrawl.db
+      - key: PORT
+        value: 3000
+    disk:
+      name: hexcrawl-data
+      mountPath: /data
+      sizeGB: 1
