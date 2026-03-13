@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -9,9 +10,21 @@ const PORT = process.env.PORT || 3000;
 const PLAYER_PASSWORD = process.env.PLAYER_PASSWORD || 'player123';
 const DM_PASSWORD = process.env.DM_PASSWORD || 'dm456';
 
+// Kick off schema init immediately; requests will await this before proceeding
+const schemaReady = db.initSchema().catch(err => {
+  console.error('Failed to initialise database:', err);
+  if (require.main === module) process.exit(1);
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// Ensure DB schema is ready before any request is handled
+app.use(async (req, res, next) => {
+  try { await schemaReady; next(); }
+  catch (e) { res.status(500).json({ error: 'Database not ready' }); }
+});
 
 // Auth middleware
 function requireAuth(req, res, next) {
@@ -138,12 +151,11 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
-// Start server — initialise DB schema first, then listen
-db.initSchema()
-  .then(() => {
+// Local dev: listen on PORT. Vercel imports this as a module, so skip listen there.
+if (require.main === module) {
+  schemaReady.then(() => {
     app.listen(PORT, () => console.log(`HexCrawl running on port ${PORT}`));
-  })
-  .catch(err => {
-    console.error('Failed to initialise database:', err);
-    process.exit(1);
   });
+}
+
+module.exports = app;
