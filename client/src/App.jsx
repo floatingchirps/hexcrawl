@@ -110,6 +110,19 @@ export default function App() {
     }
   }
 
+  // Called when status is applied directly from radial submenu
+  async function handleStatusApply(status) {
+    if (!radialMenu) return;
+    const hexLabel = radialMenu.hexLabel;
+    setRadialMenu(null);
+    try {
+      const result = await updateHex(hexLabel, { status });
+      setHexData(prev => prev.map(h => h.label === result.label ? result : h));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   // Open edit panel from info panel's "add" dropdown
   function handleOpenRadialSection(panelType) {
     if (!selectedHex) return;
@@ -232,6 +245,7 @@ export default function App() {
           onSelect={handleRadialSelect}
           onTerrainApply={handleTerrainApply}
           onPOIApply={handlePOIApply}
+          onStatusApply={handleStatusApply}
           onClose={() => setRadialMenu(null)}
           role={role}
         />
