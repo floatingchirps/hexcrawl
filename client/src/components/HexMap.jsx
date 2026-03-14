@@ -55,10 +55,15 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
   }, [data?.factions]);
   const factionColor = factions[0]?.color;
 
-  // Dangers indicator
+  // Dangers — compute max severity for glow
   const dangers = useMemo(() => {
     try { return JSON.parse(data?.dangers || '[]'); } catch { return []; }
   }, [data?.dangers]);
+  const SEVERITY_LEVELS = { Minor: 1, Moderate: 2, Severe: 3, Deadly: 4 };
+  const maxSeverity = dangers.reduce((max, d) => Math.max(max, SEVERITY_LEVELS[d.severity] || 0), 0);
+  // Glow radius as fraction of hex size: Minor=0.2, Moderate=0.4, Severe=0.6, Deadly=0.85
+  const dangerGlowRadius = maxSeverity > 0 ? [0, 0.2, 0.4, 0.6, 0.85][maxSeverity] : 0;
+  const dangerGlowId = dangerGlowRadius > 0 ? `danger-glow-${label.replace(/[^a-zA-Z0-9]/g, '_')}` : null;
 
   // Corner positions for badge
   const corners6 = useMemo(() => {
@@ -101,6 +106,20 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         strokeWidth={strokeW}
       />
 
+
+      {/* Danger glow */}
+      {dangerGlowId && isExplored && (
+        <>
+          <defs>
+            <radialGradient id={dangerGlowId}>
+              <stop offset="0%" stopColor="transparent" />
+              <stop offset={`${(1 - dangerGlowRadius) * 100}%`} stopColor="transparent" />
+              <stop offset="100%" stopColor="rgba(180,30,30,0.35)" />
+            </radialGradient>
+          </defs>
+          <polygon points={corners} fill={`url(#${dangerGlowId})`} />
+        </>
+      )}
 
       {/* Fog overlay */}
       {!isExplored && (
