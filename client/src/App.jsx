@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import LoginModal from './components/LoginModal';
 import OnboardingModal from './components/OnboardingModal';
 import HexMap from './components/HexMap';
@@ -27,6 +27,15 @@ export default function App() {
   const [radialMenu, setRadialMenu] = useState(null); // { x, y, hexLabel }
   // Edit panel state — opened from radial menu or info panel
   const [editPanel, setEditPanel] = useState(null); // { hexLabel, panelType }
+
+  // Mobile detection
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const isMobile = windowWidth < 768;
 
   const isDMView = role === 'dm' && viewMode === 'dm';
   const roleLabel = isDMView ? 'DM Map' : role === 'dm' ? 'Player Map (DM)' : role === 'player' ? 'Player' : '';
@@ -199,13 +208,15 @@ export default function App() {
           >
             {sidebarOpen ? '✕' : '☰'}
           </button>
-          <input
-            type="text"
-            placeholder="Search…"
-            style={styles.searchInput}
-            readOnly
-            title="Search (coming soon)"
-          />
+          {!isMobile && (
+            <input
+              type="text"
+              placeholder="Search…"
+              style={styles.searchInput}
+              readOnly
+              title="Search (coming soon)"
+            />
+          )}
         </div>
 
         <div style={styles.titlebarCenter}>
@@ -246,8 +257,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* ─── Sidebar ─── */}
-      <div style={{
+      {/* ─── Sidebar / Bottom sheet ─── */}
+      <div style={isMobile ? {
+        ...styles.bottomSheet,
+        transform: sidebarOpen ? 'translateY(0)' : 'translateY(100%)',
+      } : {
         ...styles.sidebar,
         width: sidebarWidth,
         transform: sidebarOpen ? 'translateX(0)' : `translateX(-${sidebarWidth}px)`,
@@ -431,6 +445,24 @@ const styles = {
   sidebarEmpty: {
     padding: '24px 16px',
     textAlign: 'center',
+  },
+
+  // ── Bottom sheet (mobile) ──
+  bottomSheet: {
+    position: 'fixed',
+    left: 0, right: 0,
+    bottom: 0,
+    height: '50vh',
+    background: 'var(--parchment)',
+    borderTop: '1.5px solid var(--parchment-dark)',
+    boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
+    zIndex: 500,
+    transition: 'transform 0.25s ease',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '12px 12px 0 0',
   },
 
   // ── Edit panel ──

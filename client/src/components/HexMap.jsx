@@ -4,7 +4,9 @@ import POIIcon from './POIIcons';
 
 const SIZE = HEX_SIZE;
 
-function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onContextMenu, onHover, onHoverEnd, role }) {
+function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onContextMenu, onLongPress, onHover, onHoverEnd, role }) {
+  const longPressTimerRef = useRef(null);
+  const touchMovedRef = useRef(false);
   if (!hex) return null;
   const { cx, cy, label } = hex;
 
@@ -89,6 +91,17 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(label, cx, cy); }}
       onMouseEnter={() => onHover(label, data)}
       onMouseLeave={onHoverEnd}
+      onTouchStart={(e) => {
+        touchMovedRef.current = false;
+        longPressTimerRef.current = setTimeout(() => {
+          if (!touchMovedRef.current) {
+            e.preventDefault();
+            onLongPress(label, cx, cy);
+          }
+        }, 500);
+      }}
+      onTouchMove={() => { touchMovedRef.current = true; clearTimeout(longPressTimerRef.current); }}
+      onTouchEnd={() => { clearTimeout(longPressTimerRef.current); }}
       style={{ cursor: 'pointer' }}
       opacity={opacity}
     >
@@ -172,6 +185,9 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
   const [didDrag, setDidDrag] = useState(false);
   const [tooltip, setTooltip] = useState(null);
   const [svgSize, setSvgSize] = useState({ w: 800, h: 600 });
+  const longPressRef = useRef(null);
+  const touchStartRef = useRef(null);
+  const lastTouchDist = useRef(null);
 
   const hexLayout = useMemo(() => buildFullLayout(ringCount, SIZE), [ringCount]);
   const hexMap = useMemo(() => {
@@ -325,6 +341,55 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
     });
   }
 
+  // Touch: single finger pan, two finger pinch-zoom
+  function handleTouchStart(e) {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStartRef.current = { x: t.clientX, y: t.clientY, tx: transform.x, ty: transform.y };
+      setDidDrag(false);
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.hypot(dx, dy);
+    }
+  }
+
+  function handleTouchMove(e) {
+    e.preventDefault();
+    if (e.touches.length === 1 && touchStartRef.current) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchStartRef.current.x;
+      const dy = t.clientY - touchStartRef.current.y;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) setDidDrag(true);
+      setTransform(tr => ({
+        ...tr,
+        x: touchStartRef.current.tx + dx,
+        y: touchStartRef.current.ty + dy,
+      }));
+    } else if (e.touches.length === 2 && lastTouchDist.current) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const delta = dist / lastTouchDist.current;
+      lastTouchDist.current = dist;
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const rect = svgRef.current.getBoundingClientRect();
+      const px = mx - rect.left;
+      const py = my - rect.top;
+      setTransform(t => {
+        const newScale = Math.max(0.2, Math.min(4, t.scale * delta));
+        const factor = newScale / t.scale;
+        return { scale: newScale, x: px + (t.x - px) * factor, y: py + (t.y - py) * factor };
+      });
+    }
+  }
+
+  function handleTouchEnd() {
+    touchStartRef.current = null;
+    lastTouchDist.current = null;
+  }
+
   // Left-click on empty space deselects
   function handleSvgClick(e) {
     // Deselect if click lands on the SVG itself or the <g> transform group (empty map space)
@@ -356,7 +421,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
         ref={svgRef}
         width="100%"
         height="100%"
-        style={{ cursor: dragging ? 'grabbing' : 'default', display: 'block' }}
+        style={{ cursor: dragging ? 'grabbing' : 'default', display: 'block', touchAction: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -364,6 +429,9 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
         onContextMenu={handleContextMenu}
         onWheel={handleWheel}
         onClick={handleSvgClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
           {hexLayout.map(hex => (
@@ -376,6 +444,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
               fadeOpacity={fadeMap[hex.label] ?? 0}
               onSelect={onHexSelect}
               onContextMenu={handleHexContextMenuWithScreenPos}
+              onLongPress={handleHexContextMenuWithScreenPos}
               onHover={handleHover}
               onHoverEnd={handleHoverEnd}
               role={role}
