@@ -65,8 +65,11 @@ const ICONS = {
   // Religious
   Shrine: ({ size = 20, color = '#3D2B1F' }) => (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.2">
-      <line x1="10" y1="2" x2="10" y2="18" />
-      <line x1="5" y1="7" x2="15" y2="7" />
+      {/* Small statue on a pedestal */}
+      <rect x="7" y="15" width="6" height="3" />
+      <ellipse cx="10" cy="11" rx="2.5" ry="4" />
+      <circle cx="10" cy="7" r="2" />
+      <line x1="7" y1="18" x2="13" y2="18" />
     </svg>
   ),
   Temple: ({ size = 20, color = '#3D2B1F' }) => (
@@ -147,7 +150,7 @@ const ICONS = {
       <line x1="2" y1="14" x2="18" y2="14" />
     </svg>
   ),
-  Ruins: ({ size = 20, color = '#3D2B1F' }) => (
+  Ruin: ({ size = 20, color = '#3D2B1F' }) => (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.2">
       <line x1="3" y1="18" x2="3" y2="8" /><line x1="3" y1="8" x2="6" y2="8" />
       <line x1="9" y1="18" x2="9" y2="5" /><line x1="9" y1="5" x2="13" y2="5" />
@@ -162,6 +165,13 @@ const ICONS = {
       <line x1="3" y1="18" x2="17" y2="18" />
       <polygon points="7,12 10,6 13,12" />
       <line x1="10" y1="6" x2="10" y2="3" />
+    </svg>
+  ),
+  Shack: ({ size = 20, color = '#3D2B1F' }) => (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.2">
+      <rect x="5" y="11" width="10" height="7" />
+      <polygon points="4,11 10,6 16,11" />
+      <rect x="8" y="14" width="3" height="4" />
     </svg>
   ),
   // Natural

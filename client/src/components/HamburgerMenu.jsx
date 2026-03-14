@@ -128,20 +128,20 @@ function MenuItem({ icon, label, onClick }) {
 
 const styles = {
   wrapper: {
-    position: 'fixed', top: 16, right: 16, zIndex: 300,
+    position: 'relative',
+    zIndex: 300,
   },
   hamburger: {
-    width: 40, height: 40,
-    background: 'var(--parchment)',
-    border: '1.5px solid var(--ink-faded)',
-    borderRadius: 4, fontSize: 18,
-    color: 'var(--ink)',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    width: 34, height: 34,
+    background: 'none',
+    border: '1.5px solid rgba(196,176,144,0.3)',
+    borderRadius: 4, fontSize: 16,
+    color: 'var(--parchment)',
     cursor: 'pointer', fontFamily: 'monospace',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   drawer: {
-    position: 'absolute', top: 48, right: 0,
+    position: 'absolute', top: 42, right: 0,
     width: 220,
     background: 'var(--parchment)',
     border: '1.5px solid var(--ink-faded)',

@@ -201,7 +201,7 @@ export const STATUS_COLORS = {
 export const POI_TYPES = {
   Settlement: ['Town', 'Village', 'City', 'Hamlet', 'Outpost', 'Fort', 'Castle'],
   Religious: ['Shrine', 'Temple', 'Monastery', 'Standing Stones', 'Cemetery'],
-  Structure: ['Tower', 'Windmill', 'Lighthouse', 'Bridge', 'Ruins', 'Mine'],
+  Structure: ['Tower', 'Windmill', 'Lighthouse', 'Bridge', 'Ruin', 'Mine', 'Shack'],
   Natural: ['Cave', 'Hot Spring', 'Waterfall', 'Ancient Tree', 'Cliff'],
   Dungeon: ['Dungeon Entrance', 'Lair', 'Tomb', 'Portal'],
   Other: ['Campsite', 'Battlefield', 'Shipwreck', 'Obelisk'],
