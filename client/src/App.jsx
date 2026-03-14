@@ -305,7 +305,7 @@ export default function App() {
       {/* ─── Sidebar / Bottom sheet ─── */}
       <div style={isMobile ? {
         ...styles.bottomSheet,
-        transform: (sidebarOpen && !editPanel) ? 'translateY(0)' : 'translateY(100%)',
+        transform: (sidebarOpen && !editPanel && !!selectedHex) ? 'translateY(0)' : 'translateY(100%)',
       } : {
         ...styles.sidebar,
         width: sidebarWidth,
@@ -339,11 +339,24 @@ export default function App() {
         right: 0,
         bottom: 0,
       }}>
+        {/* Long-press hint — mobile only, shown when nothing is open */}
+        {isMobile && !selectedHex && !radialMenu && !editPanel && (
+          <div style={{
+            position: 'absolute', top: 10, left: 12,
+            fontSize: 10, color: 'rgba(61,43,31,0.4)',
+            fontFamily: 'var(--font-body)', fontStyle: 'italic',
+            pointerEvents: 'none', userSelect: 'none', zIndex: 10,
+          }}>
+            Long-press a hex to edit it
+          </div>
+        )}
+
         <HexMap
           hexData={hexData}
           ringCount={ringCount}
           role={role}
           selectedHex={selectedHex}
+          isMobile={isMobile}
           onHexSelect={handleHexSelect}
           onHexDeselect={handleHexDeselect}
           onHexContextMenu={handleHexContextMenu}

@@ -35,11 +35,11 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
 
   function renderFeature(f, i) {
     try {
-      let stroke = '#8B6914', width = 2, dashArray = null;
-      if (f.type === 'road') { stroke = '#A0897A'; width = 2.5; }
-      else if (f.type === 'river') { stroke = '#7AACCF'; width = 2.5; }
-      else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '4,3'; }
-      else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 3; }
+      let stroke = '#8B6914', width = 3, dashArray = null;
+      if (f.type === 'road') { stroke = '#A0897A'; width = 4; }
+      else if (f.type === 'river') { stroke = '#7AACCF'; width = 4; }
+      else if (f.type === 'trail') { stroke = '#8B6914'; width = 3; dashArray = '5,4'; }
+      else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 5; }
 
       // Corner-to-corner format: straight line
       if (f.from != null && f.to != null) {
@@ -194,7 +194,7 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
   );
 }
 
-export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSelect, onHexDeselect, onHexContextMenu }) {
+export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile, onHexSelect, onHexDeselect, onHexContextMenu }) {
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -318,6 +318,23 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
 
   // Re-fit when ring count changes
   useEffect(() => { fitToCanvas(); }, [ringCount, fitToCanvas]);
+
+  // On mobile: center the map on the selected hex, accounting for the 40vh bottom sheet
+  useEffect(() => {
+    if (!isMobile || !selectedHex || !svgRef.current) return;
+    const hex = hexLayout.find(h => h.label === selectedHex);
+    if (!hex) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const bottomPanelH = window.innerHeight * 0.4; // 40vh matches bottomSheet height
+    const visibleH = window.innerHeight - rect.top - bottomPanelH;
+    const targetX = rect.width / 2;
+    const targetY = visibleH / 2;
+    setTransform(t => ({
+      ...t,
+      x: targetX - hex.cx * t.scale,
+      y: targetY - hex.cy * t.scale,
+    }));
+  }, [selectedHex, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pan: right-click drag (button 2) or middle-click drag (button 1)
   function handleMouseDown(e) {
