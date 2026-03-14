@@ -33,9 +33,27 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('edit');
 
+  // All panel-specific state must be declared unconditionally (Rules of Hooks)
+  const [newDanger, setNewDanger] = useState({ category: 'Environmental', severity: 'Minor', details: '' });
+  const [newFactionName, setNewFactionName] = useState('');
+  const [newFactionColor, setNewFactionColor] = useState('#8B6914');
+  const [newRumor, setNewRumor] = useState('');
+  const [lore, setLore] = useState('');
+  const [loreTab, setLoreTab] = useState('edit');
+  const [notes, setNotes] = useState('');
+  const [secrets, setSecrets] = useState('');
+
   useEffect(() => {
     setData(hexData || {});
-  }, [hexData, hexLabel]);
+    // Reset panel-specific state when hex or panel changes
+    setLore(hexData?.history_lore || '');
+    setNotes(hexData?.notes || '');
+    setSecrets(hexData?.secrets || '');
+    setNewDanger({ category: 'Environmental', severity: 'Minor', details: '' });
+    setNewFactionName('');
+    setNewRumor('');
+    setLoreTab('edit');
+  }, [hexData, hexLabel, panelType]);
 
   async function save(updates) {
     setSaving(true);
@@ -196,7 +214,6 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Dangers ----
   if (panelType === 'dangers') {
     const dangers = parseJSON(data.dangers, []);
-    const [newDanger, setNewDanger] = useState({ category: 'Environmental', severity: 'Minor', details: '' });
 
     function addDanger() {
       if (!newDanger.details.trim()) return;
@@ -244,14 +261,12 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Factions ----
   if (panelType === 'factions') {
     const factions = parseJSON(data.factions, []);
-    const [newName, setNewName] = useState('');
-    const [newColor, setNewColor] = useState('#8B6914');
 
     function addFaction() {
-      if (!newName.trim()) return;
-      const updated = [...factions, { name: newName.trim(), color: newColor, id: Date.now() }];
+      if (!newFactionName.trim()) return;
+      const updated = [...factions, { name: newFactionName.trim(), color: newFactionColor, id: Date.now() }];
       save({ factions: JSON.stringify(updated) });
-      setNewName('');
+      setNewFactionName('');
     }
 
     return (
@@ -264,8 +279,8 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
           </div>
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Faction name" style={{ ...styles.input, flex: 1 }} />
-          <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)} style={{ width: 36, padding: 2, border: '1px solid var(--ink-faded)', borderRadius: 3 }} />
+          <input value={newFactionName} onChange={e => setNewFactionName(e.target.value)} placeholder="Faction name" style={{ ...styles.input, flex: 1 }} />
+          <input type="color" value={newFactionColor} onChange={e => setNewFactionColor(e.target.value)} style={{ width: 36, padding: 2, border: '1px solid var(--ink-faded)', borderRadius: 3 }} />
         </div>
         <button onClick={addFaction} style={{ ...styles.addBtn, marginTop: 8 }}>+ Add Faction</button>
         {saving && <p style={styles.saving}>Saving…</p>}
@@ -308,7 +323,6 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Rumors ----
   if (panelType === 'rumors') {
     const rumors = parseJSON(data.rumors, []);
-    const [newRumor, setNewRumor] = useState('');
 
     function addRumor() {
       if (!newRumor.trim()) return;
@@ -336,19 +350,17 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
 
   // ---- History / Lore ----
   if (panelType === 'history') {
-    const [lore, setLore] = useState(data.history_lore || '');
-    const [tab, setTab] = useState('edit');
     return (
       <Panel title="History & Lore" onClose={onClose}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           {['edit', 'changelog'].map(t => (
-            <button key={t} onClick={() => { setTab(t); if (t === 'changelog') loadHistory(); }}
-              style={{ ...styles.tabBtn, fontWeight: tab === t ? 700 : 400, borderBottom: tab === t ? '2px solid var(--gold)' : 'none' }}>
+            <button key={t} onClick={() => { setLoreTab(t); if (t === 'changelog') loadHistory(); }}
+              style={{ ...styles.tabBtn, fontWeight: loreTab === t ? 700 : 400, borderBottom: loreTab === t ? '2px solid var(--gold)' : 'none' }}>
               {t === 'edit' ? 'Edit Lore' : 'Change Log'}
             </button>
           ))}
         </div>
-        {tab === 'edit' ? (
+        {loreTab === 'edit' ? (
           <>
             <textarea value={lore} onChange={e => setLore(e.target.value)}
               placeholder="Historical notes, lore, legends…" style={{ ...styles.textarea, height: 140 }} />
@@ -371,7 +383,6 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
 
   // ---- Notes ----
   if (panelType === 'notes') {
-    const [notes, setNotes] = useState(data.notes || '');
     return (
       <Panel title="Notes" onClose={onClose}>
         <textarea value={notes} onChange={e => setNotes(e.target.value)}
@@ -384,7 +395,6 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
 
   // ---- Secrets (DM only) ----
   if (panelType === 'secrets') {
-    const [secrets, setSecrets] = useState(data.secrets || '');
     return (
       <Panel title="Secrets" onClose={onClose} isDMPanel>
         <p style={{ fontSize: 12, marginBottom: 8, color: '#C4B090', fontStyle: 'italic' }}>
