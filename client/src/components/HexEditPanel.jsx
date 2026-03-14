@@ -47,6 +47,8 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [secrets, setSecrets] = useState('');
   const [newNPC, setNewNPC] = useState({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
   const [newEvent, setNewEvent] = useState({ session: '', text: '' });
+  const [featureType, setFeatureType] = useState('road');
+  const [pendingCorner, setPendingCorner] = useState(null);
   const poiSaveTimerRef = useRef(null);
 
   useEffect(() => {
@@ -61,6 +63,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setNewNPC({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
     setNewEvent({ session: '', text: '' });
     setLoreTab('edit');
+    setPendingCorner(null);
   }, [hexData, hexLabel, panelType]);
 
   async function save(updates) {
@@ -156,50 +159,113 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Features ----
   if (panelType === 'features') {
     const features = parseJSON(data.features, []);
-    const FEATURE_TYPES = ['road', 'river', 'trail', 'wall'];
+    const FEATURE_COLORS = { road: '#A0897A', river: '#7AACCF', trail: '#8B6914', wall: '#3D2B1F' };
+    const FEATURE_DASHES = { trail: '4,3' };
+    const FEATURE_WIDTHS = { road: 2.5, river: 2.5, trail: 1.5, wall: 3 };
+    const CORNER_LABELS = ['R', 'BR', 'BL', 'L', 'TL', 'TR'];
+    const CORNER_NAMES = ['Right', 'Bot-Right', 'Bot-Left', 'Left', 'Top-Left', 'Top-Right'];
+    // Label offsets relative to each corner: [dx, dy, textAnchor]
+    const LABEL_OFF = [
+      [13, 4, 'start'], [10, 14, 'start'], [-10, 14, 'end'],
+      [-13, 4, 'end'], [-10, -10, 'end'], [10, -10, 'start'],
+    ];
 
-    function toggleEdge(fType, edgeIdx) {
-      const existing = features.find(f => f.type === fType);
-      let newFeatures;
-      if (existing) {
-        const edges = existing.edges || [];
-        const newEdges = edges.includes(edgeIdx)
-          ? edges.filter(e => e !== edgeIdx)
-          : [...edges, edgeIdx];
-        if (newEdges.length === 0) {
-          newFeatures = features.filter(f => f.type !== fType);
-        } else {
-          newFeatures = features.map(f => f.type === fType ? { ...f, edges: newEdges } : f);
-        }
-      } else {
-        newFeatures = [...features, { type: fType, edges: [edgeIdx] }];
-      }
-      save({ features: JSON.stringify(newFeatures) });
+    // Mini hex geometry — flat-top, corner 0 at right (0°)
+    const HCX = 75, HCY = 65, HR = 46;
+    const mc = Array.from({ length: 6 }, (_, i) => [
+      HCX + HR * Math.cos((Math.PI / 180) * 60 * i),
+      HCY + HR * Math.sin((Math.PI / 180) * 60 * i),
+    ]);
+    const miniHexPts = mc.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+    function tapCorner(idx) {
+      if (pendingCorner === null) { setPendingCorner(idx); return; }
+      if (pendingCorner === idx) { setPendingCorner(null); return; }
+      const newF = { type: featureType, from: pendingCorner, to: idx, id: Date.now() };
+      save({ features: JSON.stringify([...features, newF]) });
+      setPendingCorner(null);
     }
+
+    function miniPath(f) {
+      if (f.from === undefined || f.to === undefined) return null;
+      const [x1, y1] = mc[f.from], [x2, y2] = mc[f.to];
+      return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${HCX},${HCY} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+    }
+
+    const activeColor = FEATURE_COLORS[featureType] || '#8B6914';
 
     return (
       <Panel title="Features" onClose={onClose} extraStyle={panelExtra}>
-        {FEATURE_TYPES.map(fType => {
-          const existing = features.find(f => f.type === fType);
-          const activeEdges = existing?.edges || [];
-          return (
-            <div key={fType} style={{ marginBottom: 12 }}>
-              <div style={styles.catLabel}>{fType.charAt(0).toUpperCase() + fType.slice(1)}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {EDGE_LABELS.map((lbl, idx) => (
-                  <button key={idx} onClick={() => toggleEdge(fType, idx)}
-                    style={{
-                      ...styles.edgeBtn,
-                      background: activeEdges.includes(idx) ? 'var(--gold-dark)' : 'var(--parchment-light)',
-                      color: activeEdges.includes(idx) ? 'white' : 'var(--ink)',
-                    }}>
-                    {lbl}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        {/* Type selector */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+          {Object.keys(FEATURE_COLORS).map(t => (
+            <button key={t} onClick={() => { setFeatureType(t); setPendingCorner(null); }} style={{
+              flex: 1, padding: '5px 2px', borderRadius: 3, fontSize: 9,
+              fontFamily: 'var(--font-heading)', letterSpacing: '0.04em', cursor: 'pointer',
+              textTransform: 'capitalize', textAlign: 'center',
+              background: featureType === t ? FEATURE_COLORS[t] : 'var(--parchment-light)',
+              color: featureType === t ? 'white' : 'var(--ink)',
+              border: `1.5px solid ${featureType === t ? FEATURE_COLORS[t] : 'var(--ink-faded)'}`,
+            }}>{t}</button>
+          ))}
+        </div>
+
+        {/* Visual hex corner picker */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+          <svg width="150" height="130" viewBox="0 0 150 130" style={{ overflow: 'visible' }}>
+            <polygon points={miniHexPts} fill="var(--parchment-light)" stroke="var(--ink-faded)" strokeWidth="1.5" />
+            {/* Existing features */}
+            {features.map((f, i) => {
+              const p = miniPath(f);
+              if (!p) return null;
+              return <path key={f.id || i} d={p}
+                stroke={FEATURE_COLORS[f.type] || '#888'}
+                strokeWidth={FEATURE_WIDTHS[f.type] || 2}
+                strokeDasharray={FEATURE_DASHES[f.type]}
+                fill="none" strokeLinecap="round" />;
+            })}
+            {/* Pending line preview */}
+            {pendingCorner !== null && (
+              <circle cx={mc[pendingCorner][0]} cy={mc[pendingCorner][1]} r={8}
+                fill={activeColor} opacity={0.25} />
+            )}
+            {/* Corner dots */}
+            {mc.map(([x, y], i) => (
+              <g key={i} onClick={() => tapCorner(i)} style={{ cursor: 'pointer' }}>
+                <circle cx={x} cy={y} r={11} fill="transparent" />
+                <circle cx={x} cy={y} r={5}
+                  fill={pendingCorner === i ? activeColor : 'var(--parchment)'}
+                  stroke={pendingCorner === i ? activeColor : 'var(--ink-faded)'}
+                  strokeWidth="1.5" />
+                <text x={x + LABEL_OFF[i][0]} y={y + LABEL_OFF[i][1]}
+                  textAnchor={LABEL_OFF[i][2]} fontSize="7"
+                  fill="var(--ink-light)" fontFamily="var(--font-heading)"
+                  style={{ pointerEvents: 'none' }}>{CORNER_LABELS[i]}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+
+        <p style={{ fontSize: 10, textAlign: 'center', fontStyle: 'italic', marginBottom: 10,
+          color: pendingCorner !== null ? activeColor : 'var(--ink-light)' }}>
+          {pendingCorner !== null
+            ? `${CORNER_NAMES[pendingCorner]} — tap another corner to place`
+            : `Tap two corners to add a ${featureType}`}
+        </p>
+
+        {/* Feature list */}
+        {features.map((f, i) => (
+          <div key={f.id || i} style={styles.listItem}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: FEATURE_COLORS[f.type] || '#888', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ fontSize: 12, textTransform: 'capitalize', marginLeft: 6 }}>{f.type}</span>
+            {f.from !== undefined && f.to !== undefined && (
+              <span style={{ fontSize: 10, color: 'var(--ink-light)', marginLeft: 4 }}>
+                {CORNER_NAMES[f.from]} → {CORNER_NAMES[f.to]}
+              </span>
+            )}
+            <button onClick={() => save({ features: JSON.stringify(features.filter((_, j) => j !== i)) })} style={styles.deleteBtn}>✕</button>
+          </div>
+        ))}
         {saving && <p style={styles.saving}>Saving…</p>}
       </Panel>
     );

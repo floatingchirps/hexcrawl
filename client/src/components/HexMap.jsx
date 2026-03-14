@@ -31,20 +31,28 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
   const edgeMidpoints = hexEdgeMidpoints(cx, cy, SIZE);
 
   function renderFeature(f, i) {
-    const edges = f.edges || [];
-    if (!edges.length) return null;
-
-    const points = edges.map(e => edgeMidpoints[e]);
-    if (points.length < 2) return null;
-
-    const pathD = points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-
-    let stroke = '#8B6914', width = 2, dashArray = null, wavy = false;
+    let stroke = '#8B6914', width = 2, dashArray = null;
     if (f.type === 'road') { stroke = '#A0897A'; width = 2.5; }
-    else if (f.type === 'river') { stroke = '#7AACCF'; width = 2; wavy = true; }
-    else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '3,3'; }
+    else if (f.type === 'river') { stroke = '#7AACCF'; width = 2.5; }
+    else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '4,3'; }
     else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 3; }
 
+    // New corner-to-corner format: quadratic Bezier through hex center
+    if (f.from !== undefined && f.to !== undefined) {
+      const [x1, y1] = corners6[f.from];
+      const [x2, y2] = corners6[f.to];
+      const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+      return (
+        <path key={i} d={pathD} stroke={stroke} strokeWidth={width}
+          strokeDasharray={dashArray} fill="none" strokeLinecap="round" />
+      );
+    }
+
+    // Legacy edge-midpoint format
+    const edges = f.edges || [];
+    if (edges.length < 2) return null;
+    const points = edges.map(e => edgeMidpoints[e]);
+    const pathD = points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
     return (
       <path key={i} d={pathD} stroke={stroke} strokeWidth={width}
         strokeDasharray={dashArray} fill="none" strokeLinecap="round" />
@@ -239,6 +247,13 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
           queue.push(nLabel);
         }
       }
+    }
+
+    // If no hex has terrain yet, show everything at full opacity
+    if (queue.length === 0) {
+      const result = {};
+      hexLayout.forEach(h => { result[h.label] = 1; });
+      return result;
     }
 
     // Convert distance to opacity
