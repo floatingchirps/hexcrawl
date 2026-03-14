@@ -6,7 +6,7 @@ import RadialMenu from './components/RadialMenu';
 import HexEditPanel from './components/HexEditPanel';
 import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
-import { getStoredRole, fetchHexes, fetchMeta, updateHex } from './utils/api';
+import { getStoredRole, logout, fetchHexes, fetchMeta, updateHex } from './utils/api';
 
 const TITLEBAR_HEIGHT = 48;
 
@@ -53,6 +53,16 @@ export default function App() {
   }
 
   function handleLogin(r) { setRole(r); }
+  function handleLogout() {
+    logout();
+    setRole(null);
+    setHexData([]);
+    setMeta({});
+    setSelectedHex(null);
+    setSidebarOpen(true);
+    setRadialMenu(null);
+    setEditPanel(null);
+  }
   function handleOnboardingComplete() { loadAll(); }
 
   // Left-click on a hex selects it and opens sidebar
@@ -188,7 +198,7 @@ export default function App() {
         </div>
 
         <div style={styles.titlebarRight}>
-          <HamburgerMenu role={role} onRingChange={handleRingChange} onImport={loadAll} />
+          <HamburgerMenu role={role} onRingChange={handleRingChange} onLogout={handleLogout} />
         </div>
       </div>
 

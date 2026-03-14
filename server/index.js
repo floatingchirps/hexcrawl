@@ -146,6 +146,14 @@ app.post('/api/import/json', requireDM, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/reset (DM only)
+app.post('/api/reset', requireDM, async (req, res) => {
+  try {
+    await db.resetMap();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Fallback to React app
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));

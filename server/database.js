@@ -255,9 +255,24 @@ async function importJSON(data) {
   if (data.meta) await setMeta(data.meta);
 }
 
+async function resetMap() {
+  await query('DELETE FROM hexes');
+  await query('DELETE FROM hex_history');
+  await query('DELETE FROM map_meta');
+  // Re-seed with defaults
+  await query(`INSERT INTO map_meta (key, value) VALUES ('current_ring_count', '0') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('onboarding_complete', '0') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('map_name', 'Untitled Campaign') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO hexes (label, ring, explored, status) VALUES ('0', 0, 0, 'unknown') ON CONFLICT DO NOTHING`);
+  for (let i = 1; i <= 4; i++) {
+    await ensureHexesExistForRing(i);
+  }
+  await query(`UPDATE map_meta SET value = '4' WHERE key = 'current_ring_count'`);
+}
+
 module.exports = {
   initSchema,
   getAllHexes, getHex, updateHex, getHexHistory,
   getMeta, setMeta, addRing, removeOuterRing,
-  exportJSON, exportCSV, importJSON,
+  exportJSON, exportCSV, importJSON, resetMap,
 };

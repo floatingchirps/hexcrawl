@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { addRing, removeRing, exportJSON, exportCSV, importJSONData } from '../utils/api';
+import { addRing, removeRing, exportJSON, resetMap } from '../utils/api';
 
-export default function HamburgerMenu({ role, onRingChange, onImport }) {
+export default function HamburgerMenu({ role, onRingChange, onLogout }) {
   const [open, setOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [resetStep, setResetStep] = useState(0); // 0=none, 1=first warning, 2=final warning
   const ref = useRef(null);
 
   useEffect(() => {
     function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+        setResetStep(0);
+      }
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -38,22 +42,15 @@ export default function HamburgerMenu({ role, onRingChange, onImport }) {
     setOpen(false);
   }
 
-  async function handleImport() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (window.confirm('This will replace all map data. Continue?')) {
-        await importJSONData(data);
-        onImport();
-      }
-    };
-    input.click();
+  async function handleDownloadBackup() {
+    await exportJSON();
+  }
+
+  async function handleResetConfirmed() {
+    await resetMap();
+    setResetStep(0);
     setOpen(false);
+    onRingChange(); // reload all data
   }
 
   function handlePrint() {
@@ -63,7 +60,7 @@ export default function HamburgerMenu({ role, onRingChange, onImport }) {
 
   return (
     <div ref={ref} style={styles.wrapper}>
-      <button onClick={() => setOpen(o => !o)} style={styles.hamburger} title="Menu">
+      <button onClick={() => { setOpen(o => !o); setResetStep(0); }} style={styles.hamburger} title="Menu">
         ☰
       </button>
 
@@ -76,31 +73,24 @@ export default function HamburgerMenu({ role, onRingChange, onImport }) {
           {role === 'dm' && <MenuItem icon="−" label="Remove Outer Ring" onClick={handleRemoveRing} />}
 
           <div style={styles.section}>Export</div>
-          <MenuItem icon="↓" label="Export as PNG" onClick={() => { alert('Use Ctrl+P or browser print to save as PDF/image.'); setOpen(false); }} />
-          <MenuItem icon="↓" label="Export as JSON" onClick={() => { exportJSON(); setOpen(false); }} />
-          <MenuItem icon="↓" label="Export as CSV" onClick={() => { exportCSV(); setOpen(false); }} />
+          <MenuItem icon="⎙" label="Export as PNG (Print)" onClick={handlePrint} />
 
           {role === 'dm' && <>
-            <div style={styles.section}>Import</div>
-            <MenuItem icon="↑" label="Import JSON" onClick={handleImport} />
+            <div style={styles.section}>Danger Zone</div>
+            <MenuItem icon="⟳" label="Reset Map" onClick={() => setResetStep(1)} danger />
           </>}
 
-          <div style={styles.section}>View</div>
-          <MenuItem icon="⎙" label="Print View" onClick={handlePrint} />
-
-          <div style={styles.section}>About</div>
-          <MenuItem icon="ℹ" label="About HexCrawl" onClick={() => {
-            alert('HexCrawl Map Tracker\nA collaborative TTRPG hex map tool.\n\nBuilt with React + Express + SQLite.');
-            setOpen(false);
-          }} />
+          <div style={styles.divider} />
+          <MenuItem icon="↩" label="Log Out" onClick={() => { setOpen(false); onLogout(); }} />
         </div>
       )}
 
+      {/* Remove ring confirmation */}
       {confirmRemove && (
         <div style={styles.confirmOverlay}>
           <div style={styles.confirmBox}>
             <p style={{ fontFamily: 'var(--font-heading)', fontSize: 14, marginBottom: 12 }}>
-              ⚠ Warning
+              Warning
             </p>
             <p style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
               The outer ring contains {confirmRemove.populated_count} populated hex{confirmRemove.populated_count !== 1 ? 'es' : ''}.
@@ -113,13 +103,62 @@ export default function HamburgerMenu({ role, onRingChange, onImport }) {
           </div>
         </div>
       )}
+
+      {/* Reset map — Step 1: first warning with backup download */}
+      {resetStep === 1 && (
+        <div style={styles.confirmOverlay}>
+          <div style={styles.confirmBox}>
+            <p style={{ fontFamily: 'var(--font-heading)', fontSize: 14, marginBottom: 12, color: 'var(--danger-red)' }}>
+              Reset Entire Map?
+            </p>
+            <p style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+              This will <strong>permanently delete all hex data</strong>, including terrain, POIs, notes, secrets, and history. The map will be reset to a blank 4-ring grid.
+            </p>
+            <p style={{ fontSize: 13, marginBottom: 16 }}>
+              <button onClick={handleDownloadBackup} style={{
+                background: 'none', border: 'none', color: 'var(--gold-dark)',
+                textDecoration: 'underline', cursor: 'pointer', fontSize: 13,
+                fontFamily: 'var(--font-body)', padding: 0,
+              }}>
+                Download a backup (JSON)
+              </button>{' '}
+              before proceeding.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setResetStep(2)} style={styles.confirmBtn}>I understand, continue</button>
+              <button onClick={() => setResetStep(0)} style={styles.cancelBtn}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset map — Step 2: final confirmation */}
+      {resetStep === 2 && (
+        <div style={styles.confirmOverlay}>
+          <div style={{ ...styles.confirmBox, border: '3px solid var(--danger-red)' }}>
+            <p style={{ fontFamily: 'var(--font-heading)', fontSize: 16, marginBottom: 12, color: 'var(--danger-red)' }}>
+              ARE YOU SURE?
+            </p>
+            <p style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              This action <strong>cannot be undone</strong>. All map data will be permanently erased.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleResetConfirmed} style={styles.confirmBtn}>Yes, reset everything</button>
+              <button onClick={() => setResetStep(0)} style={styles.cancelBtn}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function MenuItem({ icon, label, onClick }) {
+function MenuItem({ icon, label, onClick, danger }) {
   return (
-    <button onClick={onClick} style={styles.menuItem}>
+    <button onClick={onClick} style={{
+      ...styles.menuItem,
+      color: danger ? 'var(--danger-red)' : 'var(--ink)',
+    }}>
       <span style={styles.menuIcon}>{icon}</span>
       {label}
     </button>
@@ -166,6 +205,11 @@ const styles = {
     color: 'var(--ink-faded)',
     marginTop: 4,
   },
+  divider: {
+    height: 1,
+    background: 'var(--parchment-dark)',
+    margin: '6px 12px',
+  },
   menuItem: {
     display: 'flex', alignItems: 'center', gap: 10,
     width: '100%', padding: '8px 16px',
@@ -189,7 +233,7 @@ const styles = {
     background: 'var(--parchment)',
     border: '2px solid var(--danger-red)',
     borderRadius: 4, padding: 24,
-    maxWidth: 320,
+    maxWidth: 360,
     boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
   },
   confirmBtn: {

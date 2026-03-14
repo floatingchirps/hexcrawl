@@ -113,3 +113,10 @@ export async function importJSONData(data) {
     body: JSON.stringify(data)
   });
 }
+
+export async function resetMap() {
+  return fetchJSON(`${BASE}/reset`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}
