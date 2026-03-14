@@ -12,7 +12,7 @@ const ALL_SECTIONS = [
   { id: 'factions', label: 'Organizations', icon: '⚔' },
   { id: 'resources', label: 'Resources', icon: '◈' },
   { id: 'rumors', label: 'Rumors', icon: '✉' },
-  { id: 'history', label: 'History & Lore', icon: '📜' },
+  { id: 'history', label: 'Events', icon: '📜' },
   { id: 'npcs', label: 'NPCs', icon: '👤' },
   { id: 'notes', label: 'Notes', icon: '✎' },
   { id: 'secrets', label: 'Secrets', icon: '🔒' },
@@ -51,7 +51,11 @@ function hasData(data, sectionId) {
       const r = parseJSON(data.rumors, []);
       return r.length > 0;
     }
-    case 'history': return !!(data.history_lore && data.history_lore.trim());
+    case 'history': {
+      // Support both old plain text and new JSON events format
+      if (!data.history_lore || !data.history_lore.trim()) return false;
+      try { const evts = JSON.parse(data.history_lore); return evts.length > 0; } catch { return true; }
+    }
     case 'npcs': {
       const n = parseJSON(data.npcs, []);
       return n.length > 0;
@@ -182,8 +186,28 @@ function SectionContent({ sectionId, data }) {
         </div>
       );
     }
-    case 'history':
-      return <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{data.history_lore}</p>;
+    case 'history': {
+      let events = [];
+      try { events = JSON.parse(data.history_lore); } catch { /* legacy plain text */ }
+      if (!Array.isArray(events)) {
+        // Old format: plain text
+        return <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{data.history_lore}</p>;
+      }
+      // Sort by session number descending
+      const sorted = [...events].sort((a, b) => (b.session || 0) - (a.session || 0));
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sorted.map((ev, i) => (
+            <div key={ev.id || i}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-heading)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold-dark)' }}>
+                Session {ev.session || '?'}
+              </span>
+              <p style={{ fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>{ev.text}</p>
+            </div>
+          ))}
+        </div>
+      );
+    }
     case 'notes':
       return <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{data.notes}</p>;
     case 'secrets':

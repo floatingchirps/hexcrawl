@@ -10,7 +10,7 @@ const SEGMENTS = [
   { id: 'factions', label: 'Orgs', icon: '⚔', color: '#8B6914' },
   { id: 'resources', label: 'Resources', icon: '◈', color: '#4A6B3A' },
   { id: 'rumors', label: 'Rumors', icon: '✉', color: '#6B4C35' },
-  { id: 'history', label: 'History', icon: '📜', color: '#8B6914' },
+  { id: 'history', label: 'Events', icon: '📜', color: '#8B6914' },
   { id: 'status', label: 'Status', icon: '◉', color: '#4A90D9' },
   { id: 'npcs', label: 'NPCs', icon: '👤', color: '#5A4A8A' },
   { id: 'notes', label: 'Notes', icon: '✎', color: '#6B4C35' },

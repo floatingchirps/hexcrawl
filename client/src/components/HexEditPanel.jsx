@@ -44,6 +44,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [notes, setNotes] = useState('');
   const [secrets, setSecrets] = useState('');
   const [newNPC, setNewNPC] = useState({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
+  const [newEvent, setNewEvent] = useState({ session: '', text: '' });
 
   useEffect(() => {
     setData(hexData || {});
@@ -55,6 +56,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setNewFactionName('');
     setNewRumor('');
     setNewNPC({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
+    setNewEvent({ session: '', text: '' });
     setLoreTab('edit');
   }, [hexData, hexLabel, panelType]);
 
@@ -371,34 +373,49 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     );
   }
 
-  // ---- History / Lore ----
+  // ---- Events ----
   if (panelType === 'history') {
+    let events = [];
+    try { events = JSON.parse(data.history_lore || '[]'); } catch { events = []; }
+    if (!Array.isArray(events)) events = [];
+    // Sort by session descending
+    const sorted = [...events].sort((a, b) => (b.session || 0) - (a.session || 0));
+
+    function addEvent() {
+      if (!newEvent.text.trim()) return;
+      const sessionNum = parseInt(newEvent.session) || 0;
+      const updated = [...events, { session: sessionNum, text: newEvent.text.trim(), id: Date.now() }];
+      save({ history_lore: JSON.stringify(updated) });
+      setNewEvent({ session: '', text: '' });
+    }
+
+    function removeEvent(id) {
+      save({ history_lore: JSON.stringify(events.filter(e => e.id !== id)) });
+    }
+
     return (
-      <Panel title="History & Lore" onClose={onClose}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {['edit', 'changelog'].map(t => (
-            <button key={t} onClick={() => { setLoreTab(t); if (t === 'changelog') loadHistory(); }}
-              style={{ ...styles.tabBtn, fontWeight: loreTab === t ? 700 : 400, borderBottom: loreTab === t ? '2px solid var(--gold)' : 'none' }}>
-              {t === 'edit' ? 'Edit Lore' : 'Change Log'}
-            </button>
-          ))}
-        </div>
-        {loreTab === 'edit' ? (
-          <>
-            <textarea value={lore} onChange={e => setLore(e.target.value)}
-              placeholder="Historical notes, lore, legends…" style={{ ...styles.textarea, height: 140 }} />
-            <button onClick={() => save({ history_lore: lore })} style={styles.addBtn}>Save</button>
-          </>
-        ) : (
-          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-            {history.length === 0 ? <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--ink-light)' }}>No changes yet.</p> : history.map(h => (
-              <div key={h.id} style={{ borderBottom: '1px solid var(--parchment-dark)', padding: '6px 0' }}>
-                <span style={{ fontSize: 10, color: 'var(--ink-faded)' }}>{h.changed_at}</span>
-                <p style={{ fontSize: 12 }}><strong>{h.field_name}</strong>: {String(h.old_value).slice(0, 30)} → {String(h.new_value).slice(0, 30)}</p>
+      <Panel title="Events" onClose={onClose}>
+        <div style={{ marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
+          {sorted.map(ev => (
+            <div key={ev.id} style={styles.listItem}>
+              <div>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-heading)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold-dark)' }}>
+                  Session {ev.session || '?'}
+                </span>
+                <p style={{ fontSize: 13, marginTop: 2 }}>{ev.text}</p>
               </div>
-            ))}
-          </div>
-        )}
+              <button onClick={() => removeEvent(ev.id)} style={styles.deleteBtn}>✕</button>
+            </div>
+          ))}
+          {sorted.length === 0 && <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--ink-light)' }}>No events yet.</p>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input value={newEvent.session} onChange={e => setNewEvent(d => ({ ...d, session: e.target.value }))}
+            placeholder="Session # (e.g. 12)" type="number" style={{ ...styles.input, width: 120 }} />
+          <textarea value={newEvent.text} onChange={e => setNewEvent(d => ({ ...d, text: e.target.value }))}
+            placeholder="What happened?" style={{ ...styles.textarea, height: 80 }} />
+          <button onClick={addEvent} style={styles.addBtn}>+ Add Event</button>
+        </div>
         {saving && <p style={styles.saving}>Saving…</p>}
       </Panel>
     );
