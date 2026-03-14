@@ -4,8 +4,9 @@ import { updateHex, fetchHexHistory } from '../utils/api';
 import POIIcon from './POIIcons';
 
 const RESOURCE_TYPES = ['Herbs', 'Ore/Metal', 'Lumber', 'Fresh Water', 'Game/Hunting', 'Fish', 'Stone', 'Rare Materials'];
-const DANGER_CATEGORIES = ['Environmental', 'Enemies', 'Trap', 'Curse', 'Other'];
+const DANGER_CATEGORIES = ['Environment', 'Creatures', 'People', 'Magical'];
 const DANGER_SEVERITIES = ['Minor', 'Moderate', 'Severe', 'Deadly'];
+const SEVERITY_COLORS = { Minor: '#D4A017', Moderate: '#D48A17', Severe: '#C44A20', Deadly: '#8B2020' };
 const EDGE_LABELS = ['Right', 'Bottom-Right', 'Bottom-Left', 'Left', 'Top-Left', 'Top-Right'];
 
 function Panel({ title, onClose, children, isDMPanel }) {
@@ -34,7 +35,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [activeTab, setActiveTab] = useState('edit');
 
   // All panel-specific state must be declared unconditionally (Rules of Hooks)
-  const [newDanger, setNewDanger] = useState({ category: 'Environmental', severity: 'Minor', details: '' });
+  const [newDanger, setNewDanger] = useState({ category: 'Environment', severity: 'Minor', details: '' });
   const [newFactionName, setNewFactionName] = useState('');
   const [newFactionColor, setNewFactionColor] = useState('#8B6914');
   const [newRumor, setNewRumor] = useState('');
@@ -49,7 +50,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setLore(hexData?.history_lore || '');
     setNotes(hexData?.notes || '');
     setSecrets(hexData?.secrets || '');
-    setNewDanger({ category: 'Environmental', severity: 'Minor', details: '' });
+    setNewDanger({ category: 'Environment', severity: 'Minor', details: '' });
     setNewFactionName('');
     setNewRumor('');
     setLoreTab('edit');
@@ -219,7 +220,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
       if (!newDanger.details.trim()) return;
       const updated = [...dangers, { ...newDanger, id: Date.now() }];
       save({ dangers: JSON.stringify(updated) });
-      setNewDanger({ category: 'Environmental', severity: 'Minor', details: '' });
+      setNewDanger({ category: 'Environment', severity: 'Minor', details: '' });
     }
 
     function removeDanger(id) {
@@ -232,7 +233,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
           {dangers.map(d => (
             <div key={d.id} style={styles.listItem}>
               <div>
-                <strong style={{ fontSize: 11, color: 'var(--danger-red)' }}>{d.severity}</strong>
+                <strong style={{ fontSize: 11, color: SEVERITY_COLORS[d.severity] || 'var(--danger-red)' }}>{d.severity}</strong>
                 <span style={{ fontSize: 11, color: 'var(--ink-light)', marginLeft: 6 }}>{d.category}</span>
                 <p style={{ fontSize: 13, marginTop: 2 }}>{d.details}</p>
               </div>
@@ -240,14 +241,34 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <select value={newDanger.category} onChange={e => setNewDanger(d => ({ ...d, category: e.target.value }))} style={styles.selectSm}>
-              {DANGER_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-            <select value={newDanger.severity} onChange={e => setNewDanger(d => ({ ...d, severity: e.target.value }))} style={styles.selectSm}>
-              {DANGER_SEVERITIES.map(s => <option key={s}>{s}</option>)}
-            </select>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={styles.catLabel}>Severity</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {DANGER_SEVERITIES.map(s => (
+              <button key={s} onClick={() => setNewDanger(d => ({ ...d, severity: s }))}
+                style={{
+                  flex: 1, padding: '5px 4px', borderRadius: 3, fontSize: 10,
+                  fontFamily: 'var(--font-heading)', letterSpacing: '0.05em',
+                  cursor: 'pointer', textAlign: 'center',
+                  background: newDanger.severity === s ? (SEVERITY_COLORS[s] || '#8B2020') : 'var(--parchment-light)',
+                  color: newDanger.severity === s ? 'white' : 'var(--ink)',
+                  border: `1.5px solid ${newDanger.severity === s ? (SEVERITY_COLORS[s] || '#8B2020') : 'var(--ink-faded)'}`,
+                }}>{s}</button>
+            ))}
+          </div>
+          <div style={styles.catLabel}>Type</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {DANGER_CATEGORIES.map(c => (
+              <button key={c} onClick={() => setNewDanger(d => ({ ...d, category: c }))}
+                style={{
+                  flex: 1, padding: '5px 4px', borderRadius: 3, fontSize: 10,
+                  fontFamily: 'var(--font-heading)', letterSpacing: '0.05em',
+                  cursor: 'pointer', textAlign: 'center',
+                  background: newDanger.category === c ? 'var(--gold-dark)' : 'var(--parchment-light)',
+                  color: newDanger.category === c ? 'white' : 'var(--ink)',
+                  border: `1.5px solid ${newDanger.category === c ? 'var(--gold-dark)' : 'var(--ink-faded)'}`,
+                }}>{c}</button>
+            ))}
           </div>
           <textarea value={newDanger.details} onChange={e => setNewDanger(d => ({ ...d, details: e.target.value }))}
             placeholder="Describe the danger…" style={{ ...styles.textarea, height: 60 }} />
