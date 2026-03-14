@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import LoginModal from './components/LoginModal';
 import OnboardingModal from './components/OnboardingModal';
 import HexMap from './components/HexMap';
@@ -37,6 +37,10 @@ export default function App() {
   }, []);
   const isMobile = windowWidth < 768;
 
+  // Live polling refs
+  const lastSeenTimestamp = useRef(null);
+  const pollIntervalRef = useRef(null);
+
   const isDMView = role === 'dm' && viewMode === 'dm';
   const roleLabel = isDMView ? 'DM Map' : role === 'dm' ? 'Player Map (DM)' : role === 'player' ? 'Player' : '';
 
@@ -59,12 +63,32 @@ export default function App() {
       const [hexes, m] = await Promise.all([fetchHexes(mapOwner), fetchMeta(mapOwner)]);
       setHexData(hexes);
       setMeta(m);
+      lastSeenTimestamp.current = m.last_updated ?? null;
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   }
+
+  // Live update: poll for changes every 2.5s
+  useEffect(() => {
+    if (!role) return;
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    const map = role === 'dm' ? viewMode : 'shared';
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const m = await fetchMeta(map);
+        const newTs = m.last_updated ?? null;
+        if (newTs && newTs !== lastSeenTimestamp.current) {
+          lastSeenTimestamp.current = newTs;
+          const hexes = await fetchHexes(map);
+          setHexData(hexes);
+        }
+      } catch { /* silently ignore poll errors */ }
+    }, 2500);
+    return () => clearInterval(pollIntervalRef.current);
+  }, [role, viewMode]);
 
   function handleLogin(r) { setRole(r); }
   function handleLogout() {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TERRAIN_COLORS, TERRAIN_LIST, STATUS_COLORS, POI_TYPES } from '../utils/hexGeometry';
 import { updateHex, fetchHexHistory } from '../utils/api';
 import POIIcon from './POIIcons';
@@ -45,6 +45,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [secrets, setSecrets] = useState('');
   const [newNPC, setNewNPC] = useState({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
   const [newEvent, setNewEvent] = useState({ session: '', text: '' });
+  const poiSaveTimerRef = useRef(null);
 
   useEffect(() => {
     setData(hexData || {});
@@ -112,7 +113,14 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
         <input
           placeholder="POI name (optional)"
           value={data.poi_name || ''}
-          onChange={e => setData(d => ({ ...d, poi_name: e.target.value }))}
+          onChange={e => {
+            const name = e.target.value;
+            setData(d => ({ ...d, poi_name: name }));
+            clearTimeout(poiSaveTimerRef.current);
+            poiSaveTimerRef.current = setTimeout(() => {
+              save({ poi_name: name });
+            }, 600);
+          }}
           style={styles.input}
         />
         <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 8 }}>

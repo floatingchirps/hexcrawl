@@ -88,11 +88,13 @@ async function initSchema() {
   await query(`INSERT INTO map_meta (key, value) VALUES ('current_ring_count', '0') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('onboarding_complete', '0') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('map_name', 'Untitled Campaign') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('last_updated', '') ON CONFLICT (key) DO NOTHING`);
 
   // Defaults for DM map
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_current_ring_count', '4') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_onboarding_complete', '1') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_map_name', 'DM Map') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('dm_last_updated', '') ON CONFLICT (key) DO NOTHING`);
 
   // Seed shared map if empty
   const sharedCount = await queryOne(`SELECT COUNT(*) as c FROM hexes WHERE map_owner = 'shared'`);
@@ -241,6 +243,9 @@ async function updateHex(label, updates, mapOwner = 'shared') {
       [...vals, now, label, mapOwner]
     );
   }
+
+  // Touch last_updated so polling clients know to refresh
+  await setMeta({ last_updated: now }, mapOwner);
 
   return getHex(label, true, mapOwner);
 }
