@@ -48,6 +48,12 @@ function getRole(req) {
   return null;
 }
 
+// Helper: get map_owner from query param, enforce DM-only access for 'dm' map
+function getMapOwner(req) {
+  const map = req.query.map || 'shared';
+  return map === 'dm' ? 'dm' : 'shared';
+}
+
 // POST /api/auth
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
@@ -60,7 +66,10 @@ app.post('/api/auth', (req, res) => {
 app.get('/api/hexes', async (req, res) => {
   try {
     const isDM = getRole(req) === 'dm';
-    res.json(await db.getAllHexes(isDM));
+    const mapOwner = getMapOwner(req);
+    // Only DM can access DM map
+    if (mapOwner === 'dm' && !isDM) return res.status(403).json({ error: 'DM only' });
+    res.json(await db.getAllHexes(isDM, mapOwner));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -68,7 +77,9 @@ app.get('/api/hexes', async (req, res) => {
 app.get('/api/hexes/:label', async (req, res) => {
   try {
     const isDM = getRole(req) === 'dm';
-    const hex = await db.getHex(req.params.label, isDM);
+    const mapOwner = getMapOwner(req);
+    if (mapOwner === 'dm' && !isDM) return res.status(403).json({ error: 'DM only' });
+    const hex = await db.getHex(req.params.label, isDM, mapOwner);
     if (!hex) return res.status(404).json({ error: 'Not found' });
     res.json(hex);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -77,30 +88,36 @@ app.get('/api/hexes/:label', async (req, res) => {
 // PUT /api/hexes/:label
 app.put('/api/hexes/:label', requireAuth, async (req, res) => {
   try {
+    const mapOwner = getMapOwner(req);
+    if (mapOwner === 'dm' && req.role !== 'dm') return res.status(403).json({ error: 'DM only' });
     const updates = { ...req.body };
     if (req.role !== 'dm') delete updates.secrets;
-    res.json(await db.updateHex(req.params.label, updates));
+    res.json(await db.updateHex(req.params.label, updates, mapOwner));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/hexes/:label/history
 app.get('/api/hexes/:label/history', async (req, res) => {
   try {
-    res.json(await db.getHexHistory(req.params.label));
+    const mapOwner = getMapOwner(req);
+    res.json(await db.getHexHistory(req.params.label, mapOwner));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/meta
 app.get('/api/meta', async (req, res) => {
   try {
-    res.json(await db.getMeta());
+    const mapOwner = getMapOwner(req);
+    res.json(await db.getMeta(mapOwner));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT /api/meta
 app.put('/api/meta', requireAuth, async (req, res) => {
   try {
-    await db.setMeta(req.body);
+    const mapOwner = getMapOwner(req);
+    if (mapOwner === 'dm' && req.role !== 'dm') return res.status(403).json({ error: 'DM only' });
+    await db.setMeta(req.body, mapOwner);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -108,22 +125,26 @@ app.put('/api/meta', requireAuth, async (req, res) => {
 // POST /api/rings/add
 app.post('/api/rings/add', requireAuth, async (req, res) => {
   try {
-    res.json({ ring_count: await db.addRing() });
+    const mapOwner = getMapOwner(req);
+    if (mapOwner === 'dm' && req.role !== 'dm') return res.status(403).json({ error: 'DM only' });
+    res.json({ ring_count: await db.addRing(mapOwner) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/rings/remove
 app.post('/api/rings/remove', requireDM, async (req, res) => {
   try {
-    res.json(await db.removeOuterRing(req.body.confirm === true));
+    const mapOwner = getMapOwner(req);
+    res.json(await db.removeOuterRing(req.body.confirm === true, mapOwner));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/export/json
 app.get('/api/export/json', async (req, res) => {
   try {
-    const data = await db.exportJSON();
-    res.setHeader('Content-Disposition', 'attachment; filename=hexcrawl.json');
+    const mapOwner = getMapOwner(req);
+    const data = await db.exportJSON(mapOwner);
+    res.setHeader('Content-Disposition', `attachment; filename=hexcrawl-${mapOwner}.json`);
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -131,8 +152,9 @@ app.get('/api/export/json', async (req, res) => {
 // GET /api/export/csv
 app.get('/api/export/csv', async (req, res) => {
   try {
-    const csv = await db.exportCSV();
-    res.setHeader('Content-Disposition', 'attachment; filename=hexcrawl.csv');
+    const mapOwner = getMapOwner(req);
+    const csv = await db.exportCSV(mapOwner);
+    res.setHeader('Content-Disposition', `attachment; filename=hexcrawl-${mapOwner}.csv`);
     res.setHeader('Content-Type', 'text/csv');
     res.send(csv);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -141,7 +163,8 @@ app.get('/api/export/csv', async (req, res) => {
 // POST /api/import/json
 app.post('/api/import/json', requireDM, async (req, res) => {
   try {
-    await db.importJSON(req.body);
+    const mapOwner = getMapOwner(req);
+    await db.importJSON(req.body, mapOwner);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -149,7 +172,8 @@ app.post('/api/import/json', requireDM, async (req, res) => {
 // POST /api/reset (DM only)
 app.post('/api/reset', requireDM, async (req, res) => {
   try {
-    await db.resetMap();
+    const mapOwner = getMapOwner(req);
+    await db.resetMap(mapOwner);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -27,7 +27,7 @@ function Panel({ title, onClose, children, isDMPanel }) {
   );
 }
 
-export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role }) {
+export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role, mapOwner }) {
   const [data, setData] = useState(hexData || {});
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -59,7 +59,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setSaving(true);
     try {
       const merged = { ...updates, explored: 1 };
-      const result = await updateHex(hexLabel, merged);
+      const result = await updateHex(hexLabel, merged, mapOwner);
       onSave(result);
     } catch (err) {
       console.error(err);
@@ -69,7 +69,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   }
 
   async function loadHistory() {
-    const h = await fetchHexHistory(hexLabel);
+    const h = await fetchHexHistory(hexLabel, mapOwner);
     setHistory(h);
     setActiveTab('history');
   }

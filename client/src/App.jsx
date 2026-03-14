@@ -16,6 +16,9 @@ export default function App() {
   const [meta, setMeta] = useState({});
   const [loading, setLoading] = useState(true);
 
+  // DM view mode: 'shared' = player map, 'dm' = DM-only map
+  const [viewMode, setViewMode] = useState('shared');
+
   // Sidebar open/closed
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Selection state — left-click selects a hex
@@ -25,7 +28,8 @@ export default function App() {
   // Edit panel state — opened from radial menu or info panel
   const [editPanel, setEditPanel] = useState(null); // { hexLabel, panelType }
 
-  const roleLabel = role === 'dm' ? 'Dungeon Master' : role === 'player' ? 'Player' : '';
+  const isDMView = role === 'dm' && viewMode === 'dm';
+  const roleLabel = isDMView ? 'DM Map' : role === 'dm' ? 'Player Map (DM)' : role === 'player' ? 'Player' : '';
 
   // Restore session
   useEffect(() => {
@@ -33,16 +37,17 @@ export default function App() {
     if (r) setRole(r);
   }, []);
 
-  // Load data when role is set
+  // Load data when role or viewMode changes
   useEffect(() => {
     if (!role) { setLoading(false); return; }
     loadAll();
-  }, [role]);
+  }, [role, viewMode]);
 
   async function loadAll() {
     setLoading(true);
     try {
-      const [hexes, m] = await Promise.all([fetchHexes(), fetchMeta()]);
+      const mapOwner = role === 'dm' ? viewMode : 'shared';
+      const [hexes, m] = await Promise.all([fetchHexes(mapOwner), fetchMeta(mapOwner)]);
       setHexData(hexes);
       setMeta(m);
     } catch (err) {
@@ -62,8 +67,12 @@ export default function App() {
     setSidebarOpen(true);
     setRadialMenu(null);
     setEditPanel(null);
+    setViewMode('shared');
   }
   function handleOnboardingComplete() { loadAll(); }
+
+  // Current map owner for API calls
+  const currentMap = role === 'dm' ? viewMode : 'shared';
 
   // Left-click on a hex selects it and opens sidebar
   function handleHexSelect(label) {
@@ -87,46 +96,44 @@ export default function App() {
     setRadialMenu({ x, y, hexLabel: label });
   }
 
-  // Radial menu select — for terrain, the radial handles it directly via onTerrainApply
+  // Radial menu select — opens edit panel
   function handleRadialSelect(panelType) {
     if (!radialMenu) return;
     setEditPanel({ hexLabel: radialMenu.hexLabel, panelType });
     setRadialMenu(null);
   }
 
-  // Called when terrain is applied directly from radial submenu
+  // Direct apply handlers from radial submenus
   async function handleTerrainApply(terrain) {
     if (!radialMenu) return;
     const hexLabel = radialMenu.hexLabel;
     setRadialMenu(null);
     try {
-      const result = await updateHex(hexLabel, { terrain, explored: 1 });
+      const result = await updateHex(hexLabel, { terrain, explored: 1 }, currentMap);
       setHexData(prev => prev.map(h => h.label === result.label ? result : h));
     } catch (err) {
       console.error(err);
     }
   }
 
-  // Called when POI is applied directly from radial submenu
   async function handlePOIApply(poi_type) {
     if (!radialMenu) return;
     const hexLabel = radialMenu.hexLabel;
     setRadialMenu(null);
     try {
-      const result = await updateHex(hexLabel, { poi_type, explored: 1 });
+      const result = await updateHex(hexLabel, { poi_type, explored: 1 }, currentMap);
       setHexData(prev => prev.map(h => h.label === result.label ? result : h));
     } catch (err) {
       console.error(err);
     }
   }
 
-  // Called when status is applied directly from radial submenu
   async function handleStatusApply(status) {
     if (!radialMenu) return;
     const hexLabel = radialMenu.hexLabel;
     setRadialMenu(null);
     try {
-      const result = await updateHex(hexLabel, { status });
+      const result = await updateHex(hexLabel, { status }, currentMap);
       setHexData(prev => prev.map(h => h.label === result.label ? result : h));
     } catch (err) {
       console.error(err);
@@ -145,6 +152,16 @@ export default function App() {
 
   function handlePanelClose() { setEditPanel(null); }
   function handleRingChange() { loadAll(); }
+
+  // Toggle DM view
+  function handleViewToggle() {
+    const next = viewMode === 'shared' ? 'dm' : 'shared';
+    setViewMode(next);
+    setSelectedHex(null);
+    setSidebarOpen(true);
+    setRadialMenu(null);
+    setEditPanel(null);
+  }
 
   const selectedHexData = selectedHex
     ? hexData.find(h => h.label === selectedHex) || null
@@ -169,7 +186,11 @@ export default function App() {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       {/* ─── Titlebar ─── */}
-      <div style={styles.titlebar}>
+      <div style={{
+        ...styles.titlebar,
+        background: isDMView ? '#1A0D05' : 'var(--ink)',
+        borderBottom: isDMView ? '2px solid var(--gold)' : 'none',
+      }}>
         <div style={styles.titlebarLeft}>
           <button
             onClick={() => setSidebarOpen(o => !o)}
@@ -188,7 +209,10 @@ export default function App() {
         </div>
 
         <div style={styles.titlebarCenter}>
-          <span style={styles.titleRole}>{roleLabel}</span>
+          <span style={{
+            ...styles.titleRole,
+            color: isDMView ? 'var(--gold)' : 'var(--ink-faded)',
+          }}>{roleLabel}</span>
           {meta.map_name && (
             <>
               <span style={styles.titleSep}>—</span>
@@ -198,7 +222,27 @@ export default function App() {
         </div>
 
         <div style={styles.titlebarRight}>
-          <HamburgerMenu role={role} onRingChange={handleRingChange} onLogout={handleLogout} />
+          {/* DM view toggle */}
+          {role === 'dm' && (
+            <button
+              onClick={handleViewToggle}
+              style={{
+                ...styles.titlebarBtn,
+                marginRight: 8,
+                fontSize: 11,
+                width: 'auto',
+                padding: '0 10px',
+                fontFamily: 'var(--font-heading)',
+                letterSpacing: '0.08em',
+                color: isDMView ? 'var(--gold)' : 'var(--parchment)',
+                borderColor: isDMView ? 'var(--gold)' : 'rgba(196,176,144,0.3)',
+              }}
+              title={isDMView ? 'Switch to Player Map' : 'Switch to DM Map'}
+            >
+              {isDMView ? '⚑ Player Map' : '🗝 DM Map'}
+            </button>
+          )}
+          <HamburgerMenu role={role} viewMode={viewMode} onRingChange={handleRingChange} onLogout={handleLogout} />
         </div>
       </div>
 
@@ -271,6 +315,7 @@ export default function App() {
             onClose={handlePanelClose}
             onSave={handlePanelSave}
             role={role}
+            mapOwner={currentMap}
           />
         </div>
       )}

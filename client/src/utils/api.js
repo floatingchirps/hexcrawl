@@ -4,15 +4,15 @@ function getToken() {
   return sessionStorage.getItem('hc_token') || '';
 }
 
-function getRole() {
-  return sessionStorage.getItem('hc_role') || '';
-}
-
 function authHeaders() {
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${getToken()}`
   };
+}
+
+function mapParam(mapOwner) {
+  return mapOwner && mapOwner !== 'shared' ? `?map=${mapOwner}` : '';
 }
 
 async function fetchJSON(url, opts = {}) {
@@ -44,78 +44,61 @@ export function getStoredRole() {
   return sessionStorage.getItem('hc_role');
 }
 
-export async function fetchHexes() {
-  return fetchJSON(`${BASE}/hexes`, { headers: authHeaders() });
+export async function fetchHexes(mapOwner) {
+  return fetchJSON(`${BASE}/hexes${mapParam(mapOwner)}`, { headers: authHeaders() });
 }
 
-export async function fetchHex(label) {
-  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}`, { headers: authHeaders() });
+export async function fetchHex(label, mapOwner) {
+  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}${mapParam(mapOwner)}`, { headers: authHeaders() });
 }
 
-export async function updateHex(label, updates) {
-  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}`, {
+export async function updateHex(label, updates, mapOwner) {
+  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}${mapParam(mapOwner)}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(updates)
   });
 }
 
-export async function fetchHexHistory(label) {
-  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}/history`, { headers: authHeaders() });
+export async function fetchHexHistory(label, mapOwner) {
+  return fetchJSON(`${BASE}/hexes/${encodeURIComponent(label)}/history${mapParam(mapOwner)}`, { headers: authHeaders() });
 }
 
-export async function fetchMeta() {
-  return fetchJSON(`${BASE}/meta`, { headers: authHeaders() });
+export async function fetchMeta(mapOwner) {
+  return fetchJSON(`${BASE}/meta${mapParam(mapOwner)}`, { headers: authHeaders() });
 }
 
-export async function updateMeta(updates) {
-  return fetchJSON(`${BASE}/meta`, {
+export async function updateMeta(updates, mapOwner) {
+  return fetchJSON(`${BASE}/meta${mapParam(mapOwner)}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(updates)
   });
 }
 
-export async function addRing() {
-  return fetchJSON(`${BASE}/rings/add`, { method: 'POST', headers: authHeaders() });
+export async function addRing(mapOwner) {
+  return fetchJSON(`${BASE}/rings/add${mapParam(mapOwner)}`, { method: 'POST', headers: authHeaders() });
 }
 
-export async function removeRing(confirm = false) {
-  return fetchJSON(`${BASE}/rings/remove`, {
+export async function removeRing(confirm = false, mapOwner) {
+  return fetchJSON(`${BASE}/rings/remove${mapParam(mapOwner)}`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ confirm })
   });
 }
 
-export async function exportJSON() {
-  const res = await fetch(`${BASE}/export/json`, { headers: authHeaders() });
+export async function exportJSON(mapOwner) {
+  const res = await fetch(`${BASE}/export/json${mapParam(mapOwner)}`, { headers: authHeaders() });
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'hexcrawl.json'; a.click();
+  a.href = url; a.download = `hexcrawl-${mapOwner || 'shared'}.json`; a.click();
   URL.revokeObjectURL(url);
 }
 
-export async function exportCSV() {
-  const res = await fetch(`${BASE}/export/csv`, { headers: authHeaders() });
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'hexcrawl.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-export async function importJSONData(data) {
-  return fetchJSON(`${BASE}/import/json`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(data)
-  });
-}
-
-export async function resetMap() {
-  return fetchJSON(`${BASE}/reset`, {
+export async function resetMap(mapOwner) {
+  return fetchJSON(`${BASE}/reset${mapParam(mapOwner)}`, {
     method: 'POST',
     headers: authHeaders(),
   });

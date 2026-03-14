@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { addRing, removeRing, exportJSON, resetMap } from '../utils/api';
 
-export default function HamburgerMenu({ role, onRingChange, onLogout }) {
+export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange, onLogout }) {
   const [open, setOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(null);
   const [resetStep, setResetStep] = useState(0); // 0=none, 1=first warning, 2=final warning
@@ -19,35 +19,35 @@ export default function HamburgerMenu({ role, onRingChange, onLogout }) {
   }, []);
 
   async function handleAddRing() {
-    await addRing();
+    await addRing(viewMode);
     onRingChange();
     setOpen(false);
   }
 
   async function handleRemoveRing() {
-    const result = await removeRing(false);
+    const result = await removeRing(false, viewMode);
     if (result.needs_confirm) {
       setConfirmRemove(result);
     } else if (result.ok || result.populated_count === 0) {
-      await removeRing(true);
+      await removeRing(true, viewMode);
       onRingChange();
       setOpen(false);
     }
   }
 
   async function confirmRemoveRing() {
-    await removeRing(true);
+    await removeRing(true, viewMode);
     setConfirmRemove(null);
     onRingChange();
     setOpen(false);
   }
 
   async function handleDownloadBackup() {
-    await exportJSON();
+    await exportJSON(viewMode);
   }
 
   async function handleResetConfirmed() {
-    await resetMap();
+    await resetMap(viewMode);
     setResetStep(0);
     setOpen(false);
     onRingChange(); // reload all data

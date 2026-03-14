@@ -1,12 +1,10 @@
 const { Pool } = require('pg');
 
-// Railway provides DATABASE_URL automatically when you add a Postgres plugin
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Run a query and return rows
 async function query(sql, params = []) {
   const client = await pool.connect();
   try {
@@ -17,7 +15,6 @@ async function query(sql, params = []) {
   }
 }
 
-// Run a query and return the first row only
 async function queryOne(sql, params = []) {
   const rows = await query(sql, params);
   return rows[0] || null;
@@ -27,7 +24,8 @@ async function queryOne(sql, params = []) {
 async function initSchema() {
   await query(`
     CREATE TABLE IF NOT EXISTS hexes (
-      label TEXT PRIMARY KEY,
+      label TEXT,
+      map_owner TEXT DEFAULT 'shared',
       terrain TEXT,
       poi_type TEXT,
       poi_name TEXT,
@@ -43,7 +41,8 @@ async function initSchema() {
       explored INTEGER DEFAULT 0,
       ring INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-      updated_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+      updated_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+      PRIMARY KEY (label, map_owner)
     )
   `);
 
@@ -51,6 +50,7 @@ async function initSchema() {
     CREATE TABLE IF NOT EXISTS hex_history (
       id SERIAL PRIMARY KEY,
       hex_label TEXT,
+      map_owner TEXT DEFAULT 'shared',
       field_name TEXT,
       old_value TEXT,
       new_value TEXT,
@@ -65,23 +65,58 @@ async function initSchema() {
     )
   `);
 
-  // Insert defaults if not present
+  // Migration: if table exists with old single-column PK, add map_owner
+  try {
+    const hasCol = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'hexes' AND column_name = 'map_owner'`
+    );
+    if (!hasCol) {
+      await query(`ALTER TABLE hexes ADD COLUMN map_owner TEXT DEFAULT 'shared'`);
+      await query(`ALTER TABLE hexes DROP CONSTRAINT hexes_pkey`);
+      await query(`ALTER TABLE hexes ADD PRIMARY KEY (label, map_owner)`);
+      await query(`ALTER TABLE hex_history ADD COLUMN map_owner TEXT DEFAULT 'shared'`);
+    }
+  } catch (_) { /* column already exists or table was created with it */ }
+
+  // Defaults for shared map
   await query(`INSERT INTO map_meta (key, value) VALUES ('current_ring_count', '0') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('onboarding_complete', '0') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('map_name', 'Untitled Campaign') ON CONFLICT (key) DO NOTHING`);
 
-  // Seed initial hexes if empty
-  const count = await queryOne('SELECT COUNT(*) as c FROM hexes');
-  if (parseInt(count.c) === 0) {
-    await query(`INSERT INTO hexes (label, ring, explored, status) VALUES ('0', 0, 0, 'unknown') ON CONFLICT DO NOTHING`);
-    for (let i = 1; i <= 4; i++) {
-      await ensureHexesExistForRing(i);
-    }
-    await query(`UPDATE map_meta SET value = '4' WHERE key = 'current_ring_count'`);
+  // Defaults for DM map
+  await query(`INSERT INTO map_meta (key, value) VALUES ('dm_current_ring_count', '4') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('dm_onboarding_complete', '1') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('dm_map_name', 'DM Map') ON CONFLICT (key) DO NOTHING`);
+
+  // Seed shared map if empty
+  const sharedCount = await queryOne(`SELECT COUNT(*) as c FROM hexes WHERE map_owner = 'shared'`);
+  if (parseInt(sharedCount.c) === 0) {
+    await seedMap('shared', 4);
+  }
+
+  // Seed DM map if empty
+  const dmCount = await queryOne(`SELECT COUNT(*) as c FROM hexes WHERE map_owner = 'dm'`);
+  if (parseInt(dmCount.c) === 0) {
+    await seedMap('dm', 4);
   }
 }
 
-// --- Hex coordinate generation (same logic as before) ---
+async function seedMap(mapOwner, rings) {
+  await query(
+    `INSERT INTO hexes (label, map_owner, ring, explored, status) VALUES ($1, $2, 0, 0, 'unknown') ON CONFLICT (label, map_owner) DO NOTHING`,
+    ['0', mapOwner]
+  );
+  for (let i = 1; i <= rings; i++) {
+    await ensureHexesExistForRing(i, mapOwner);
+  }
+  const prefix = mapOwner === 'dm' ? 'dm_' : '';
+  await query(
+    `INSERT INTO map_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
+    [`${prefix}current_ring_count`, String(rings)]
+  );
+}
+
+// --- Hex coordinate generation ---
 function getRingHexesWithLabels(ringNum) {
   if (ringNum === 0) return [{ q: 0, r: 0, label: '0' }];
   const directions = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
@@ -109,56 +144,86 @@ function getRingHexesWithLabels(ringNum) {
   return hexes;
 }
 
-async function ensureHexesExistForRing(ringNum) {
+async function ensureHexesExistForRing(ringNum, mapOwner = 'shared') {
   const hexes = getRingHexesWithLabels(ringNum);
   for (const h of hexes) {
     await query(
-      `INSERT INTO hexes (label, ring, explored, status) VALUES ($1, $2, 0, 'unknown') ON CONFLICT (label) DO NOTHING`,
-      [h.label, ringNum]
+      `INSERT INTO hexes (label, map_owner, ring, explored, status) VALUES ($1, $2, $3, 0, 'unknown') ON CONFLICT (label, map_owner) DO NOTHING`,
+      [h.label, mapOwner, ringNum]
     );
   }
 }
 
-// --- Public API ---
+// --- Meta helpers ---
+function metaKey(key, mapOwner) {
+  if (mapOwner === 'dm') return `dm_${key}`;
+  return key;
+}
 
-async function getAllHexes(isDM = false) {
-  const rows = await query('SELECT * FROM hexes ORDER BY ring, label');
+async function getMeta(mapOwner = 'shared') {
+  const rows = await query('SELECT * FROM map_meta');
+  const meta = {};
+  const prefix = mapOwner === 'dm' ? 'dm_' : '';
+  rows.forEach(r => {
+    if (mapOwner === 'dm') {
+      if (r.key.startsWith('dm_')) {
+        meta[r.key.slice(3)] = r.value;
+      }
+    } else {
+      if (!r.key.startsWith('dm_')) {
+        meta[r.key] = r.value;
+      }
+    }
+  });
+  return meta;
+}
+
+async function setMeta(updates, mapOwner = 'shared') {
+  for (const [k, v] of Object.entries(updates)) {
+    const key = metaKey(k, mapOwner);
+    await query(
+      `INSERT INTO map_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
+      [key, String(v)]
+    );
+  }
+}
+
+// --- Hex CRUD ---
+
+async function getAllHexes(isDM = false, mapOwner = 'shared') {
+  const rows = await query('SELECT * FROM hexes WHERE map_owner = $1 ORDER BY ring, label', [mapOwner]);
   if (!isDM) return rows.map(r => { const c = { ...r }; delete c.secrets; return c; });
   return rows;
 }
 
-async function getHex(label, isDM = false) {
-  const row = await queryOne('SELECT * FROM hexes WHERE label = $1', [label]);
+async function getHex(label, isDM = false, mapOwner = 'shared') {
+  const row = await queryOne('SELECT * FROM hexes WHERE label = $1 AND map_owner = $2', [label, mapOwner]);
   if (!row) return null;
   if (!isDM) { const c = { ...row }; delete c.secrets; return c; }
   return row;
 }
 
-async function updateHex(label, updates) {
-  const existing = await queryOne('SELECT * FROM hexes WHERE label = $1', [label]);
-
+async function updateHex(label, updates, mapOwner = 'shared') {
+  const existing = await queryOne('SELECT * FROM hexes WHERE label = $1 AND map_owner = $2', [label, mapOwner]);
   const now = new Date().toISOString();
-
-  // Merge explored=1 as default so updates can override it without duplicating
   const merged = { explored: 1, ...updates };
 
   if (!existing) {
     const keys = Object.keys(merged);
     const vals = Object.values(merged);
-    const cols = ['label', ...keys, 'updated_at'].join(', ');
-    const placeholders = ['$1', ...keys.map((_, i) => `$${i + 2}`), `$${keys.length + 2}`].join(', ');
+    const cols = ['label', 'map_owner', ...keys, 'updated_at'].join(', ');
+    const placeholders = ['$1', '$2', ...keys.map((_, i) => `$${i + 3}`), `$${keys.length + 3}`].join(', ');
     await query(
-      `INSERT INTO hexes (${cols}) VALUES (${placeholders}) ON CONFLICT (label) DO NOTHING`,
-      [label, ...vals, now]
+      `INSERT INTO hexes (${cols}) VALUES (${placeholders}) ON CONFLICT (label, map_owner) DO NOTHING`,
+      [label, mapOwner, ...vals, now]
     );
   } else {
-    // Log history for changed fields
     for (const [field, newVal] of Object.entries(updates)) {
       const oldVal = existing[field];
       if (String(oldVal ?? '') !== String(newVal ?? '')) {
         await query(
-          `INSERT INTO hex_history (hex_label, field_name, old_value, new_value) VALUES ($1, $2, $3, $4)`,
-          [label, field, String(oldVal ?? ''), String(newVal ?? '')]
+          `INSERT INTO hex_history (hex_label, map_owner, field_name, old_value, new_value) VALUES ($1, $2, $3, $4, $5)`,
+          [label, mapOwner, field, String(oldVal ?? ''), String(newVal ?? '')]
         );
       }
     }
@@ -166,108 +231,94 @@ async function updateHex(label, updates) {
     const setClauses = Object.keys(merged).map((k, i) => `${k} = $${i + 1}`).join(', ');
     const vals = Object.values(merged);
     await query(
-      `UPDATE hexes SET ${setClauses}, updated_at = $${vals.length + 1} WHERE label = $${vals.length + 2}`,
-      [...vals, now, label]
+      `UPDATE hexes SET ${setClauses}, updated_at = $${vals.length + 1} WHERE label = $${vals.length + 2} AND map_owner = $${vals.length + 3}`,
+      [...vals, now, label, mapOwner]
     );
   }
 
-  return getHex(label, true);
+  return getHex(label, true, mapOwner);
 }
 
-async function getHexHistory(label) {
-  return query('SELECT * FROM hex_history WHERE hex_label = $1 ORDER BY changed_at DESC', [label]);
+async function getHexHistory(label, mapOwner = 'shared') {
+  return query('SELECT * FROM hex_history WHERE hex_label = $1 AND map_owner = $2 ORDER BY changed_at DESC', [label, mapOwner]);
 }
 
-async function getMeta() {
-  const rows = await query('SELECT * FROM map_meta');
-  const meta = {};
-  rows.forEach(r => meta[r.key] = r.value);
-  return meta;
-}
+// --- Ring management ---
 
-async function setMeta(updates) {
-  for (const [k, v] of Object.entries(updates)) {
-    await query(
-      `INSERT INTO map_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
-      [k, String(v)]
-    );
-  }
-}
-
-async function addRing() {
-  const meta = await getMeta();
+async function addRing(mapOwner = 'shared') {
+  const meta = await getMeta(mapOwner);
   const currentRing = parseInt(meta.current_ring_count || '0');
   const newRing = currentRing + 1;
-  await ensureHexesExistForRing(newRing);
-  await setMeta({ current_ring_count: String(newRing) });
+  await ensureHexesExistForRing(newRing, mapOwner);
+  await setMeta({ current_ring_count: String(newRing) }, mapOwner);
   return newRing;
 }
 
-async function removeOuterRing(confirm = false) {
-  const meta = await getMeta();
+async function removeOuterRing(confirm = false, mapOwner = 'shared') {
+  const meta = await getMeta(mapOwner);
   const currentRing = parseInt(meta.current_ring_count || '0');
   if (currentRing <= 0) return { error: 'No rings to remove' };
 
   const populated = await queryOne(
-    `SELECT COUNT(*) as count FROM hexes WHERE ring = $1 AND (terrain IS NOT NULL OR poi_type IS NOT NULL OR explored = 1)`,
-    [currentRing]
+    `SELECT COUNT(*) as count FROM hexes WHERE ring = $1 AND map_owner = $2 AND (terrain IS NOT NULL OR poi_type IS NOT NULL OR explored = 1)`,
+    [currentRing, mapOwner]
   );
 
   if (!confirm) {
     return { populated_count: parseInt(populated.count), ring: currentRing, needs_confirm: parseInt(populated.count) > 0 };
   }
 
-  await query('DELETE FROM hexes WHERE ring = $1', [currentRing]);
-  await setMeta({ current_ring_count: String(currentRing - 1) });
+  await query('DELETE FROM hexes WHERE ring = $1 AND map_owner = $2', [currentRing, mapOwner]);
+  await setMeta({ current_ring_count: String(currentRing - 1) }, mapOwner);
   return { ok: true, removed_ring: currentRing };
 }
 
-async function exportJSON() {
+// --- Export / Import / Reset ---
+
+async function exportJSON(mapOwner = 'shared') {
   return {
-    hexes: await query('SELECT * FROM hexes'),
-    history: await query('SELECT * FROM hex_history'),
-    meta: await getMeta(),
+    hexes: await query('SELECT * FROM hexes WHERE map_owner = $1', [mapOwner]),
+    history: await query('SELECT * FROM hex_history WHERE map_owner = $1', [mapOwner]),
+    meta: await getMeta(mapOwner),
   };
 }
 
-async function exportCSV() {
-  const hexes = await query('SELECT * FROM hexes');
+async function exportCSV(mapOwner = 'shared') {
+  const hexes = await query('SELECT * FROM hexes WHERE map_owner = $1', [mapOwner]);
   if (!hexes.length) return '';
   const headers = Object.keys(hexes[0]);
   const rows = hexes.map(h => headers.map(k => JSON.stringify(h[k] ?? '')).join(','));
   return [headers.join(','), ...rows].join('\n');
 }
 
-async function importJSON(data) {
-  await query('DELETE FROM hexes');
-  await query('DELETE FROM hex_history');
-  await query('DELETE FROM map_meta');
+async function importJSON(data, mapOwner = 'shared') {
+  await query('DELETE FROM hexes WHERE map_owner = $1', [mapOwner]);
+  await query('DELETE FROM hex_history WHERE map_owner = $1', [mapOwner]);
 
   if (data.hexes) {
     for (const h of data.hexes) {
+      h.map_owner = mapOwner;
       const keys = Object.keys(h);
       const vals = Object.values(h);
       const cols = keys.join(', ');
       const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
-      await query(`INSERT INTO hexes (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`, vals);
+      await query(`INSERT INTO hexes (${cols}) VALUES (${placeholders}) ON CONFLICT (label, map_owner) DO NOTHING`, vals);
     }
   }
-  if (data.meta) await setMeta(data.meta);
+  if (data.meta) await setMeta(data.meta, mapOwner);
 }
 
-async function resetMap() {
-  await query('DELETE FROM hexes');
-  await query('DELETE FROM hex_history');
-  await query('DELETE FROM map_meta');
-  // Re-seed with defaults
-  await query(`INSERT INTO map_meta (key, value) VALUES ('current_ring_count', '0') ON CONFLICT (key) DO NOTHING`);
-  await query(`INSERT INTO map_meta (key, value) VALUES ('onboarding_complete', '0') ON CONFLICT (key) DO NOTHING`);
-  await query(`INSERT INTO map_meta (key, value) VALUES ('map_name', 'Untitled Campaign') ON CONFLICT (key) DO NOTHING`);
-  await query(`INSERT INTO hexes (label, ring, explored, status) VALUES ('0', 0, 0, 'unknown') ON CONFLICT DO NOTHING`);
-  for (let i = 1; i <= 4; i++) {
-    await ensureHexesExistForRing(i);
-  }
-  await query(`UPDATE map_meta SET value = '4' WHERE key = 'current_ring_count'`);
+async function resetMap(mapOwner = 'shared') {
+  await query('DELETE FROM hexes WHERE map_owner = $1', [mapOwner]);
+  await query('DELETE FROM hex_history WHERE map_owner = $1', [mapOwner]);
+
+  // Re-seed
+  const defaults = mapOwner === 'dm'
+    ? { current_ring_count: '4', onboarding_complete: '1', map_name: 'DM Map' }
+    : { current_ring_count: '4', onboarding_complete: '0', map_name: 'Untitled Campaign' };
+  await setMeta(defaults, mapOwner);
+
+  await seedMap(mapOwner, 4);
 }
 
 module.exports = {
