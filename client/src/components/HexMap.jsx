@@ -37,11 +37,11 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
     else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '4,3'; }
     else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 3; }
 
-    // New corner-to-corner format: quadratic Bezier through hex center
+    // New corner-to-corner format: straight line
     if (f.from !== undefined && f.to !== undefined) {
       const [x1, y1] = corners6[f.from];
       const [x2, y2] = corners6[f.to];
-      const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+      const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
       return (
         <path key={i} d={pathD} stroke={stroke} strokeWidth={width}
           strokeDasharray={dashArray} fill="none" strokeLinecap="round" />
@@ -369,36 +369,44 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
     }
   }
 
-  function handleTouchMove(e) {
-    e.preventDefault();
-    if (e.touches.length === 1 && touchStartRef.current) {
-      const t = e.touches[0];
-      const dx = t.clientX - touchStartRef.current.x;
-      const dy = t.clientY - touchStartRef.current.y;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) setDidDrag(true);
-      setTransform(tr => ({
-        ...tr,
-        x: touchStartRef.current.tx + dx,
-        y: touchStartRef.current.ty + dy,
-      }));
-    } else if (e.touches.length === 2 && lastTouchDist.current) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const delta = dist / lastTouchDist.current;
-      lastTouchDist.current = dist;
-      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const rect = svgRef.current.getBoundingClientRect();
-      const px = mx - rect.left;
-      const py = my - rect.top;
-      setTransform(t => {
-        const newScale = Math.max(0.2, Math.min(4, t.scale * delta));
-        const factor = newScale / t.scale;
-        return { scale: newScale, x: px + (t.x - px) * factor, y: py + (t.y - py) * factor };
-      });
+  // Attached manually as non-passive so e.preventDefault() is allowed (prevents browser scroll/zoom)
+  useEffect(() => {
+    function handleTouchMove(e) {
+      e.preventDefault();
+      if (e.touches.length === 1 && touchStartRef.current) {
+        const t = e.touches[0];
+        const dx = t.clientX - touchStartRef.current.x;
+        const dy = t.clientY - touchStartRef.current.y;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) setDidDrag(true);
+        setTransform(tr => ({
+          ...tr,
+          x: touchStartRef.current.tx + dx,
+          y: touchStartRef.current.ty + dy,
+        }));
+      } else if (e.touches.length === 2 && lastTouchDist.current) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const delta = dist / lastTouchDist.current;
+        lastTouchDist.current = dist;
+        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const px = mx - rect.left;
+        const py = my - rect.top;
+        setTransform(t => {
+          const newScale = Math.max(0.2, Math.min(4, t.scale * delta));
+          const factor = newScale / t.scale;
+          return { scale: newScale, x: px + (t.x - px) * factor, y: py + (t.y - py) * factor };
+        });
+      }
     }
-  }
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener('touchmove', handleTouchMove, { passive: false });
+    return () => svg.removeEventListener('touchmove', handleTouchMove);
+  }, []); // only refs + functional setState used inside — no stale closure risk
 
   function handleTouchEnd() {
     touchStartRef.current = null;
@@ -446,7 +454,6 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
         onWheel={handleWheel}
         onClick={handleSvgClick}
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>

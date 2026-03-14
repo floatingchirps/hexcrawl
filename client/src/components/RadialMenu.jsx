@@ -84,9 +84,11 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
     }
     window.addEventListener('keydown', handleKey);
     window.addEventListener('mousedown', handleClick);
+    window.addEventListener('touchstart', handleClick);
     return () => {
       window.removeEventListener('keydown', handleKey);
       window.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('touchstart', handleClick);
     };
   }, [onClose, submenu]);
 
