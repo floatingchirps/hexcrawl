@@ -4,7 +4,7 @@ import POIIcon from './POIIcons';
 
 const SIZE = HEX_SIZE;
 
-function HexTile({ hex, data, isCenter, onClick, onHover, onHoverEnd, role }) {
+function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onHover, onHoverEnd, role }) {
   if (!hex) return null;
   const { cx, cy, label } = hex;
 
@@ -70,19 +70,30 @@ function HexTile({ hex, data, isCenter, onClick, onHover, onHoverEnd, role }) {
   const badgeX = corners6[5] ? corners6[5][0] - 2 : cx + SIZE * 0.7;
   const badgeY = corners6[5] ? corners6[5][1] + 5 : cy - SIZE * 0.7;
 
+  // Selection stroke
+  const strokeColor = isSelected ? '#D4A017' : isCenter ? '#D4A017' : (isExplored ? '#8B6914' : '#C4B090');
+  const strokeW = isSelected ? 3.5 : isCenter ? 3 : 1.2;
+
   return (
     <g
-      onClick={() => onClick(label, cx, cy)}
+      onClick={(e) => { e.stopPropagation(); onSelect(label); }}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(label, cx, cy); }}
       onMouseEnter={() => onHover(label, data)}
       onMouseLeave={onHoverEnd}
       style={{ cursor: 'pointer' }}
     >
+      {/* Selection glow */}
+      {isSelected && (
+        <polygon points={corners} fill="none"
+          stroke="rgba(212,160,23,0.35)" strokeWidth={8} />
+      )}
+
       {/* Base fill */}
       <polygon
         points={corners}
         fill={isExplored ? fillColor : '#E8D9BC'}
-        stroke={isCenter ? '#D4A017' : (isExplored ? '#8B6914' : '#C4B090')}
-        strokeWidth={isCenter ? 3 : 1.2}
+        stroke={strokeColor}
+        strokeWidth={strokeW}
       />
 
       {/* Faction tint */}
@@ -117,7 +128,7 @@ function HexTile({ hex, data, isCenter, onClick, onHover, onHoverEnd, role }) {
         x={cx}
         y={cy + SIZE * 0.72}
         textAnchor="middle"
-        fontSize={isExplored ? 7 : 7}
+        fontSize={7}
         fill={isExplored ? '#8B6914' : '#C4B090'}
         fontFamily="var(--font-heading)"
         letterSpacing="0.05em"
@@ -138,11 +149,13 @@ function HexTile({ hex, data, isCenter, onClick, onHover, onHoverEnd, role }) {
   );
 }
 
-export default function HexMap({ hexData, ringCount, role, onHexClick }) {
+export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSelect, onHexDeselect, onHexContextMenu }) {
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
+  const [dragButton, setDragButton] = useState(null);
+  const [didDrag, setDidDrag] = useState(false);
   const [tooltip, setTooltip] = useState(null);
   const [svgSize, setSvgSize] = useState({ w: 800, h: 600 });
 
@@ -195,19 +208,34 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
   // Re-fit when ring count changes
   useEffect(() => { fitToCanvas(); }, [ringCount, fitToCanvas]);
 
+  // Pan: right-click drag (button 2) or middle-click drag (button 1)
   function handleMouseDown(e) {
-    if (e.button !== 0) return;
-    setDragging(true);
-    setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+    if (e.button === 2 || e.button === 1) {
+      e.preventDefault();
+      setDragging(true);
+      setDragButton(e.button);
+      setDidDrag(false);
+      setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+    }
   }
 
   function handleMouseMove(e) {
     if (!dragging || !dragStart) return;
+    setDidDrag(true);
     setTransform(t => ({ ...t, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
   }
 
-  function handleMouseUp() {
-    setDragging(false);
+  function handleMouseUp(e) {
+    if (dragging) {
+      setDragging(false);
+      setDragStart(null);
+      setDragButton(null);
+    }
+  }
+
+  // Prevent native context menu on the SVG (we handle right-click ourselves)
+  function handleContextMenu(e) {
+    e.preventDefault();
   }
 
   function handleWheel(e) {
@@ -227,11 +255,18 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
     });
   }
 
-  function handleHexClickWithScreenPos(label, cx, cy) {
-    // Convert hex map coordinates to screen coordinates
+  // Left-click on empty space deselects
+  function handleSvgClick(e) {
+    // Only deselect if the click was directly on the SVG or the <g> transform group, not on a hex
+    if (e.target === svgRef.current || e.target.tagName === 'svg') {
+      onHexDeselect();
+    }
+  }
+
+  function handleHexContextMenuWithScreenPos(label, cx, cy) {
     const screenX = cx * transform.scale + transform.x;
     const screenY = cy * transform.scale + transform.y;
-    onHexClick(label, { x: screenX, y: screenY });
+    onHexContextMenu(label, { x: screenX, y: screenY });
   }
 
   function handleHover(label, data) {
@@ -250,12 +285,14 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
         ref={svgRef}
         width="100%"
         height="100%"
-        style={{ cursor: dragging ? 'grabbing' : 'grab', display: 'block' }}
+        style={{ cursor: dragging ? 'grabbing' : 'default', display: 'block' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onContextMenu={handleContextMenu}
         onWheel={handleWheel}
+        onClick={handleSvgClick}
       >
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
           {hexLayout.map(hex => (
@@ -264,7 +301,9 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
               hex={hex}
               data={hexMap[hex.label]}
               isCenter={hex.label === '0'}
-              onClick={handleHexClickWithScreenPos}
+              isSelected={selectedHex === hex.label}
+              onSelect={onHexSelect}
+              onContextMenu={handleHexContextMenuWithScreenPos}
               onHover={handleHover}
               onHoverEnd={handleHoverEnd}
               role={role}

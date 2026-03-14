@@ -128,7 +128,7 @@ function MenuItem({ icon, label, onClick }) {
 
 const styles = {
   wrapper: {
-    position: 'fixed', top: 16, left: 16, zIndex: 300,
+    position: 'fixed', top: 16, right: 16, zIndex: 300,
   },
   hamburger: {
     width: 40, height: 40,
@@ -141,7 +141,7 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   drawer: {
-    position: 'absolute', top: 48, left: 0,
+    position: 'absolute', top: 48, right: 0,
     width: 220,
     background: 'var(--parchment)',
     border: '1.5px solid var(--ink-faded)',

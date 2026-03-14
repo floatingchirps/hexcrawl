@@ -4,6 +4,7 @@ import OnboardingModal from './components/OnboardingModal';
 import HexMap from './components/HexMap';
 import RadialMenu from './components/RadialMenu';
 import HexEditPanel from './components/HexEditPanel';
+import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
 import { getStoredRole, fetchHexes, fetchMeta } from './utils/api';
 
@@ -13,9 +14,11 @@ export default function App() {
   const [meta, setMeta] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Radial menu state
+  // Selection state — left-click selects a hex
+  const [selectedHex, setSelectedHex] = useState(null);
+  // Radial menu state — right-click opens it
   const [radialMenu, setRadialMenu] = useState(null); // { x, y, hexLabel }
-  // Edit panel state
+  // Edit panel state — opened from radial menu or info panel
   const [editPanel, setEditPanel] = useState(null); // { hexLabel, panelType }
 
   // Role bar label
@@ -54,30 +57,38 @@ export default function App() {
     loadAll();
   }
 
-  // When a hex is clicked, show radial menu at click position
-  function handleHexClick(label) {
-    // Close existing panels when clicking a different hex
-    if (editPanel && editPanel.hexLabel !== label) {
-      setEditPanel(null);
-    }
-    // Use center of screen if no event available
-    const x = window.innerWidth / 2;
-    const y = window.innerHeight / 2;
-    setRadialMenu({ x, y, hexLabel: label });
+  // Left-click on a hex selects it and opens the info panel
+  function handleHexSelect(label) {
+    setSelectedHex(label);
+    setRadialMenu(null);
   }
 
-  // Handle hex click with position from HexMap
-  function handleHexClickWithPos(label, pos) {
-    if (editPanel && editPanel.hexLabel !== label) setEditPanel(null);
+  // Left-click outside hexes deselects
+  function handleHexDeselect() {
+    setSelectedHex(null);
+    setEditPanel(null);
+    setRadialMenu(null);
+  }
+
+  // Right-click on a hex opens radial menu
+  function handleHexContextMenu(label, pos) {
+    setSelectedHex(label);
     const x = pos?.x ?? window.innerWidth / 2;
     const y = pos?.y ?? window.innerHeight / 2;
     setRadialMenu({ x, y, hexLabel: label });
   }
 
+  // Select a section from radial menu → open edit panel
   function handleRadialSelect(panelType) {
     if (!radialMenu) return;
     setEditPanel({ hexLabel: radialMenu.hexLabel, panelType });
     setRadialMenu(null);
+  }
+
+  // Open edit panel from info panel's "add" dropdown
+  function handleOpenRadialSection(panelType) {
+    if (!selectedHex) return;
+    setEditPanel({ hexLabel: selectedHex, panelType });
   }
 
   function handlePanelSave(updatedHex) {
@@ -92,8 +103,12 @@ export default function App() {
     loadAll();
   }
 
-  const currentHexData = editPanel
-    ? hexData.find(h => h.label === editPanel.hexLabel)
+  const selectedHexData = selectedHex
+    ? hexData.find(h => h.label === selectedHex) || null
+    : null;
+
+  const editHexData = editPanel
+    ? hexData.find(h => h.label === editPanel.hexLabel) || null
     : null;
 
   const ringCount = parseInt(meta.current_ring_count || '4');
@@ -113,10 +128,26 @@ export default function App() {
         hexData={hexData}
         ringCount={ringCount}
         role={role}
-        onHexClick={handleHexClickWithPos}
+        selectedHex={selectedHex}
+        onHexSelect={handleHexSelect}
+        onHexDeselect={handleHexDeselect}
+        onHexContextMenu={handleHexContextMenu}
       />
 
-      {/* Radial menu */}
+      {/* Info panel (left side) — shown when a hex is selected */}
+      {selectedHex && (
+        <div style={styles.infoPanelWrapper}>
+          <HexInfoPanel
+            hexLabel={selectedHex}
+            hexData={selectedHexData}
+            role={role}
+            onClose={handleHexDeselect}
+            onOpenRadialSection={handleOpenRadialSection}
+          />
+        </div>
+      )}
+
+      {/* Radial menu (right-click) */}
       {radialMenu && (
         <RadialMenu
           x={radialMenu.x}
@@ -127,19 +158,12 @@ export default function App() {
         />
       )}
 
-      {/* Edit panel */}
+      {/* Edit panel (right side) — opened from radial menu or info panel dropdown */}
       {editPanel && (
-        <div style={{
-          position: 'fixed',
-          right: 20, top: '50%',
-          transform: 'translateY(-50%)',
-          zIndex: 400,
-          maxHeight: '80vh',
-          overflowY: 'auto',
-        }}>
+        <div style={styles.editPanelWrapper}>
           <HexEditPanel
             hexLabel={editPanel.hexLabel}
-            hexData={currentHexData}
+            hexData={editHexData}
             panelType={editPanel.panelType}
             onClose={handlePanelClose}
             onSave={handlePanelSave}
@@ -148,7 +172,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Hamburger menu */}
+      {/* Hamburger menu (top-right) */}
       <HamburgerMenu role={role} onRingChange={handleRingChange} onImport={loadAll} />
 
       {/* Role indicator */}
@@ -172,6 +196,22 @@ export default function App() {
 }
 
 const styles = {
+  infoPanelWrapper: {
+    position: 'fixed',
+    left: 20,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    zIndex: 400,
+  },
+  editPanelWrapper: {
+    position: 'fixed',
+    right: 20,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    zIndex: 400,
+    maxHeight: '80vh',
+    overflowY: 'auto',
+  },
   roleBar: {
     position: 'fixed', bottom: 16, left: 16,
     display: 'flex', alignItems: 'center',
