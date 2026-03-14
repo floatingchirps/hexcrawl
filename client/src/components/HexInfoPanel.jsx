@@ -204,7 +204,7 @@ export default function HexInfoPanel({ hexLabel, hexData, role, onClose, onOpenR
       {/* Header */}
       <div style={styles.header}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={styles.hexLabel}>{hexLabel}</div>
+          <div style={styles.hexLabel}>Hex: {hexLabel}</div>
           {data.poi_name && <div style={styles.poiName}>{data.poi_name}</div>}
         </div>
         <button onClick={onClose} style={styles.closeBtn} title="Close panel">✕</button>
@@ -221,6 +221,11 @@ export default function HexInfoPanel({ hexLabel, hexData, role, onClose, onOpenR
             <div style={styles.sectionHeader}>
               <span style={styles.sectionIcon}>{section.icon}</span>
               <span style={styles.sectionLabel}>{section.label}</span>
+              <button
+                onClick={() => onOpenRadialSection(section.id)}
+                style={styles.editBtn}
+                title={`Edit ${section.label}`}
+              >✎</button>
             </div>
             <div style={styles.sectionContent}>
               <SectionContent sectionId={section.id} data={data} />
@@ -261,12 +266,9 @@ export default function HexInfoPanel({ hexLabel, hexData, role, onClose, onOpenR
 
 const styles = {
   panel: {
-    width: 300,
-    maxHeight: '80vh',
+    width: '100%',
+    flex: 1,
     background: 'var(--parchment)',
-    border: '2px solid var(--ink-faded)',
-    borderRadius: 4,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -336,6 +338,17 @@ const styles = {
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     color: 'var(--ink-light)',
+  },
+  editBtn: {
+    marginLeft: 'auto',
+    background: 'none',
+    border: 'none',
+    fontSize: 12,
+    cursor: 'pointer',
+    color: 'var(--ink-faded)',
+    padding: '0 2px',
+    flexShrink: 0,
+    lineHeight: 1,
   },
   sectionContent: {
     paddingLeft: 24,

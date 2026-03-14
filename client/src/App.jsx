@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import LoginModal from './components/LoginModal';
 import OnboardingModal from './components/OnboardingModal';
 import HexMap from './components/HexMap';
@@ -6,7 +6,9 @@ import RadialMenu from './components/RadialMenu';
 import HexEditPanel from './components/HexEditPanel';
 import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
-import { getStoredRole, fetchHexes, fetchMeta } from './utils/api';
+import { getStoredRole, fetchHexes, fetchMeta, updateHex } from './utils/api';
+
+const TITLEBAR_HEIGHT = 48;
 
 export default function App() {
   const [role, setRole] = useState(null);
@@ -14,6 +16,8 @@ export default function App() {
   const [meta, setMeta] = useState({});
   const [loading, setLoading] = useState(true);
 
+  // Sidebar open/closed
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   // Selection state — left-click selects a hex
   const [selectedHex, setSelectedHex] = useState(null);
   // Radial menu state — right-click opens it
@@ -21,8 +25,7 @@ export default function App() {
   // Edit panel state — opened from radial menu or info panel
   const [editPanel, setEditPanel] = useState(null); // { hexLabel, panelType }
 
-  // Role bar label
-  const roleLabel = role === 'dm' ? '⚔ Dungeon Master' : role === 'player' ? '⚔ Player' : '';
+  const roleLabel = role === 'dm' ? 'Dungeon Master' : role === 'player' ? 'Player' : '';
 
   // Restore session
   useEffect(() => {
@@ -49,40 +52,62 @@ export default function App() {
     }
   }
 
-  function handleLogin(r) {
-    setRole(r);
-  }
+  function handleLogin(r) { setRole(r); }
+  function handleOnboardingComplete() { loadAll(); }
 
-  function handleOnboardingComplete() {
-    loadAll();
-  }
-
-  // Left-click on a hex selects it and opens the info panel
+  // Left-click on a hex selects it and opens sidebar
   function handleHexSelect(label) {
     setSelectedHex(label);
+    setSidebarOpen(true);
     setRadialMenu(null);
   }
 
-  // Left-click outside hexes deselects
+  // Left-click outside hexes deselects and closes sidebar
   function handleHexDeselect() {
     setSelectedHex(null);
+    setSidebarOpen(false);
     setEditPanel(null);
     setRadialMenu(null);
   }
 
-  // Right-click on a hex opens radial menu
+  // Right-click on a hex opens radial menu (does NOT select)
   function handleHexContextMenu(label, pos) {
-    setSelectedHex(label);
     const x = pos?.x ?? window.innerWidth / 2;
     const y = pos?.y ?? window.innerHeight / 2;
     setRadialMenu({ x, y, hexLabel: label });
   }
 
-  // Select a section from radial menu → open edit panel
+  // Radial menu select — for terrain, the radial handles it directly via onTerrainApply
   function handleRadialSelect(panelType) {
     if (!radialMenu) return;
     setEditPanel({ hexLabel: radialMenu.hexLabel, panelType });
     setRadialMenu(null);
+  }
+
+  // Called when terrain is applied directly from radial submenu
+  async function handleTerrainApply(terrain) {
+    if (!radialMenu) return;
+    const hexLabel = radialMenu.hexLabel;
+    setRadialMenu(null);
+    try {
+      const result = await updateHex(hexLabel, { terrain, explored: 1 });
+      setHexData(prev => prev.map(h => h.label === result.label ? result : h));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // Called when POI is applied directly from radial submenu
+  async function handlePOIApply(poi_type) {
+    if (!radialMenu) return;
+    const hexLabel = radialMenu.hexLabel;
+    setRadialMenu(null);
+    try {
+      const result = await updateHex(hexLabel, { poi_type, explored: 1 });
+      setHexData(prev => prev.map(h => h.label === result.label ? result : h));
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   // Open edit panel from info panel's "add" dropdown
@@ -95,13 +120,8 @@ export default function App() {
     setHexData(prev => prev.map(h => h.label === updatedHex.label ? updatedHex : h));
   }
 
-  function handlePanelClose() {
-    setEditPanel(null);
-  }
-
-  function handleRingChange() {
-    loadAll();
-  }
+  function handlePanelClose() { setEditPanel(null); }
+  function handleRingChange() { loadAll(); }
 
   const selectedHexData = selectedHex
     ? hexData.find(h => h.label === selectedHex) || null
@@ -121,44 +141,103 @@ export default function App() {
     </div>
   );
 
+  const sidebarWidth = 300;
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-      {/* Map */}
-      <HexMap
-        hexData={hexData}
-        ringCount={ringCount}
-        role={role}
-        selectedHex={selectedHex}
-        onHexSelect={handleHexSelect}
-        onHexDeselect={handleHexDeselect}
-        onHexContextMenu={handleHexContextMenu}
-      />
+      {/* ─── Titlebar ─── */}
+      <div style={styles.titlebar}>
+        <div style={styles.titlebarLeft}>
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            style={styles.titlebarBtn}
+            title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          >
+            {sidebarOpen ? '✕' : '☰'}
+          </button>
+          <input
+            type="text"
+            placeholder="Search…"
+            style={styles.searchInput}
+            readOnly
+            title="Search (coming soon)"
+          />
+        </div>
 
-      {/* Info panel (left side) — shown when a hex is selected */}
-      {selectedHex && (
-        <div style={styles.infoPanelWrapper}>
+        <div style={styles.titlebarCenter}>
+          <span style={styles.titleRole}>{roleLabel}</span>
+          {meta.map_name && (
+            <>
+              <span style={styles.titleSep}>—</span>
+              <span style={styles.titleMap}>{meta.map_name}</span>
+            </>
+          )}
+        </div>
+
+        <div style={styles.titlebarRight}>
+          <HamburgerMenu role={role} onRingChange={handleRingChange} onImport={loadAll} />
+        </div>
+      </div>
+
+      {/* ─── Sidebar ─── */}
+      <div style={{
+        ...styles.sidebar,
+        width: sidebarWidth,
+        transform: sidebarOpen ? 'translateX(0)' : `translateX(-${sidebarWidth}px)`,
+      }}>
+        {selectedHex ? (
           <HexInfoPanel
             hexLabel={selectedHex}
             hexData={selectedHexData}
             role={role}
-            onClose={handleHexDeselect}
+            onClose={() => setSelectedHex(null)}
             onOpenRadialSection={handleOpenRadialSection}
           />
-        </div>
-      )}
+        ) : (
+          <div style={styles.sidebarEmpty}>
+            <p style={{ fontFamily: 'var(--font-heading)', fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--ink-faded)', marginBottom: 8 }}>
+              No hex selected
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--ink-light)', lineHeight: 1.5 }}>
+              Click a hex on the map to view its details, or right-click to edit.
+            </p>
+          </div>
+        )}
+      </div>
 
-      {/* Radial menu (right-click) */}
+      {/* ─── Map area ─── */}
+      <div style={{
+        position: 'absolute',
+        top: TITLEBAR_HEIGHT,
+        left: 0,
+        right: 0,
+        bottom: 0,
+      }}>
+        <HexMap
+          hexData={hexData}
+          ringCount={ringCount}
+          role={role}
+          selectedHex={selectedHex}
+          onHexSelect={handleHexSelect}
+          onHexDeselect={handleHexDeselect}
+          onHexContextMenu={handleHexContextMenu}
+        />
+      </div>
+
+      {/* ─── Radial menu ─── */}
       {radialMenu && (
         <RadialMenu
           x={radialMenu.x}
           y={radialMenu.y}
           onSelect={handleRadialSelect}
+          onTerrainApply={handleTerrainApply}
+          onPOIApply={handlePOIApply}
           onClose={() => setRadialMenu(null)}
           role={role}
         />
       )}
 
-      {/* Edit panel (right side) — opened from radial menu or info panel dropdown */}
+      {/* ─── Edit panel (right side) ─── */}
       {editPanel && (
         <div style={styles.editPanelWrapper}>
           <HexEditPanel
@@ -172,22 +251,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Hamburger menu (top-right) */}
-      <HamburgerMenu role={role} onRingChange={handleRingChange} onImport={loadAll} />
-
-      {/* Role indicator */}
-      <div style={styles.roleBar}>
-        <span style={{ fontSize: 11, color: 'var(--ink-faded)', fontFamily: 'var(--font-heading)', letterSpacing: '0.15em' }}>
-          {roleLabel}
-        </span>
-        {meta.map_name && (
-          <span style={{ fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--font-heading)', letterSpacing: '0.08em', marginLeft: 12 }}>
-            {meta.map_name}
-          </span>
-        )}
-      </div>
-
-      {/* Onboarding */}
+      {/* ─── Onboarding ─── */}
       {onboardingNeeded && (
         <OnboardingModal onComplete={handleOnboardingComplete} />
       )}
@@ -196,30 +260,117 @@ export default function App() {
 }
 
 const styles = {
-  infoPanelWrapper: {
+  // ── Titlebar ──
+  titlebar: {
     position: 'fixed',
-    left: 20,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    zIndex: 400,
+    top: 0, left: 0, right: 0,
+    height: TITLEBAR_HEIGHT,
+    background: 'var(--ink)',
+    color: 'var(--parchment)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 12px',
+    zIndex: 600,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    gap: 12,
   },
+  titlebarLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  titlebarBtn: {
+    width: 34, height: 34,
+    background: 'none',
+    border: '1.5px solid rgba(196,176,144,0.3)',
+    borderRadius: 4,
+    color: 'var(--parchment)',
+    fontSize: 16,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'monospace',
+    flexShrink: 0,
+  },
+  searchInput: {
+    width: 180,
+    height: 32,
+    background: 'rgba(242,232,213,0.1)',
+    border: '1px solid rgba(196,176,144,0.25)',
+    borderRadius: 4,
+    padding: '0 10px',
+    color: 'var(--parchment)',
+    fontSize: 13,
+    fontFamily: 'var(--font-body)',
+    outline: 'none',
+    cursor: 'default',
+  },
+  titlebarCenter: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  titleRole: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 11,
+    letterSpacing: '0.15em',
+    textTransform: 'uppercase',
+    color: 'var(--ink-faded)',
+    flexShrink: 0,
+  },
+  titleSep: {
+    color: 'var(--ink-faded)',
+    fontSize: 13,
+  },
+  titleMap: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 14,
+    letterSpacing: '0.06em',
+    color: 'var(--parchment)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  titlebarRight: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+
+  // ── Sidebar ──
+  sidebar: {
+    position: 'fixed',
+    top: TITLEBAR_HEIGHT,
+    left: 0,
+    bottom: 0,
+    background: 'var(--parchment)',
+    borderRight: '1.5px solid var(--parchment-dark)',
+    boxShadow: '2px 0 12px rgba(0,0,0,0.15)',
+    zIndex: 500,
+    transition: 'transform 0.25s ease',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  sidebarEmpty: {
+    padding: '24px 16px',
+    textAlign: 'center',
+  },
+
+  // ── Edit panel ──
   editPanelWrapper: {
     position: 'fixed',
     right: 20,
-    top: '50%',
-    transform: 'translateY(-50%)',
+    top: TITLEBAR_HEIGHT + 20,
     zIndex: 400,
-    maxHeight: '80vh',
+    maxHeight: `calc(100vh - ${TITLEBAR_HEIGHT + 40}px)`,
     overflowY: 'auto',
-  },
-  roleBar: {
-    position: 'fixed', bottom: 16, left: 16,
-    display: 'flex', alignItems: 'center',
-    gap: 4,
-    background: 'rgba(242,232,213,0.85)',
-    border: '1px solid var(--ink-faded)',
-    borderRadius: 3, padding: '5px 12px',
-    backdropFilter: 'blur(4px)',
-    zIndex: 100,
   },
 };

@@ -71,8 +71,8 @@ function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onH
   const badgeY = corners6[5] ? corners6[5][1] + 5 : cy - SIZE * 0.7;
 
   // Selection stroke
-  const strokeColor = isSelected ? '#D4A017' : isCenter ? '#D4A017' : (isExplored ? '#8B6914' : '#C4B090');
-  const strokeW = isSelected ? 3.5 : isCenter ? 3 : 1.2;
+  const strokeColor = isSelected ? '#D4A017' : isCenter ? '#D4A017' : (isExplored ? 'rgba(139,105,20,0.25)' : 'rgba(196,176,144,0.35)');
+  const strokeW = isSelected ? 3.5 : isCenter ? 2 : 0.5;
 
   return (
     <g
@@ -116,12 +116,6 @@ function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onH
 
       {/* Feature lines */}
       {isExplored && features.map(renderFeature)}
-
-      {/* Status badge */}
-      {isExplored && status !== 'unknown' && (
-        <circle cx={badgeX} cy={badgeY} r={5} fill={statusColor}
-          stroke="#F2E8D5" strokeWidth={1} />
-      )}
 
       {/* Hex label */}
       <text
@@ -257,8 +251,9 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
 
   // Left-click on empty space deselects
   function handleSvgClick(e) {
-    // Only deselect if the click was directly on the SVG or the <g> transform group, not on a hex
-    if (e.target === svgRef.current || e.target.tagName === 'svg') {
+    // Deselect if click lands on the SVG itself or the <g> transform group (empty map space)
+    // Hex tiles call stopPropagation so their clicks don't reach here
+    if (e.target === svgRef.current || e.target.tagName === 'svg' || e.target.tagName === 'g') {
       onHexDeselect();
     }
   }
