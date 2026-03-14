@@ -400,8 +400,9 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
   }
 
   function handleHexContextMenuWithScreenPos(label, cx, cy) {
-    const screenX = cx * transform.scale + transform.x;
-    const screenY = cy * transform.scale + transform.y;
+    const rect = svgRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const screenX = cx * transform.scale + transform.x + rect.left;
+    const screenY = cy * transform.scale + transform.y + rect.top;
     onHexContextMenu(label, { x: screenX, y: screenY });
   }
 

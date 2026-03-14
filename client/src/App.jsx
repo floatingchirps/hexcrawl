@@ -244,13 +244,15 @@ export default function App() {
         </div>
 
         <div style={styles.titlebarCenter}>
-          <span style={{
-            ...styles.titleRole,
-            color: isDMView ? 'var(--gold)' : 'var(--ink-faded)',
-          }}>{roleLabel}</span>
+          {!isMobile && (
+            <span style={{
+              ...styles.titleRole,
+              color: isDMView ? 'var(--gold)' : 'var(--ink-faded)',
+            }}>{roleLabel}</span>
+          )}
           {meta.map_name && (
             <>
-              <span style={styles.titleSep}>—</span>
+              {!isMobile && <span style={styles.titleSep}>—</span>}
               <span style={styles.titleMap}>{meta.map_name}</span>
             </>
           )}
@@ -264,17 +266,16 @@ export default function App() {
               style={{
                 ...styles.titlebarBtn,
                 marginRight: 8,
-                fontSize: 11,
-                width: 'auto',
-                padding: '0 10px',
-                fontFamily: 'var(--font-heading)',
-                letterSpacing: '0.08em',
                 color: isDMView ? 'var(--gold)' : 'var(--parchment)',
                 borderColor: isDMView ? 'var(--gold)' : 'rgba(196,176,144,0.3)',
+                ...(isMobile ? { fontSize: 18 } : {
+                  fontSize: 11, width: 'auto', padding: '0 10px',
+                  fontFamily: 'var(--font-heading)', letterSpacing: '0.08em',
+                }),
               }}
               title={isDMView ? 'Switch to Player Map' : 'Switch to DM Map'}
             >
-              {isDMView ? '⚑ Player Map' : '🗝 DM Map'}
+              {isMobile ? (isDMView ? '⚑' : '🗝') : (isDMView ? '⚑ Player Map' : '🗝 DM Map')}
             </button>
           )}
           <HamburgerMenu role={role} viewMode={viewMode} onRingChange={handleRingChange} onLogout={handleLogout} />
@@ -284,7 +285,7 @@ export default function App() {
       {/* ─── Sidebar / Bottom sheet ─── */}
       <div style={isMobile ? {
         ...styles.bottomSheet,
-        transform: sidebarOpen ? 'translateY(0)' : 'translateY(100%)',
+        transform: (sidebarOpen && !editPanel) ? 'translateY(0)' : 'translateY(100%)',
       } : {
         ...styles.sidebar,
         width: sidebarWidth,
@@ -343,9 +344,9 @@ export default function App() {
         />
       )}
 
-      {/* ─── Edit panel (right side) ─── */}
+      {/* ─── Edit panel ─── */}
       {editPanel && (
-        <div style={styles.editPanelWrapper}>
+        <div style={isMobile ? styles.editPanelWrapperMobile : styles.editPanelWrapper}>
           <HexEditPanel
             hexLabel={editPanel.hexLabel}
             hexData={editHexData}
@@ -354,6 +355,7 @@ export default function App() {
             onSave={handlePanelSave}
             role={role}
             mapOwner={currentMap}
+            isMobile={isMobile}
           />
         </div>
       )}
@@ -476,7 +478,7 @@ const styles = {
     position: 'fixed',
     left: 0, right: 0,
     bottom: 0,
-    height: '50vh',
+    height: '40vh',
     background: 'var(--parchment)',
     borderTop: '1.5px solid var(--parchment-dark)',
     boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
@@ -489,13 +491,26 @@ const styles = {
     borderRadius: '12px 12px 0 0',
   },
 
-  // ── Edit panel ──
+  // ── Edit panel (desktop) ──
   editPanelWrapper: {
     position: 'fixed',
     right: 20,
     top: TITLEBAR_HEIGHT + 20,
-    zIndex: 400,
+    zIndex: 600,
     maxHeight: `calc(100vh - ${TITLEBAR_HEIGHT + 40}px)`,
     overflowY: 'auto',
+  },
+
+  // ── Edit panel (mobile) — slides up from bottom, full-width ──
+  editPanelWrapperMobile: {
+    position: 'fixed',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 700,
+    maxHeight: '70vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
   },
 };

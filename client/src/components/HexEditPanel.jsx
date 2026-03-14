@@ -9,13 +9,14 @@ const DANGER_SEVERITIES = ['Minor', 'Moderate', 'Severe', 'Deadly'];
 const SEVERITY_COLORS = { Minor: '#D4A017', Moderate: '#D48A17', Severe: '#C44A20', Deadly: '#8B2020' };
 const EDGE_LABELS = ['Right', 'Bottom-Right', 'Bottom-Left', 'Left', 'Top-Left', 'Top-Right'];
 
-function Panel({ title, onClose, children, isDMPanel }) {
+function Panel({ title, onClose, children, isDMPanel, extraStyle }) {
   return (
     <div style={{
       ...styles.panel,
       background: isDMPanel ? '#2A1A0A' : 'var(--parchment)',
       color: isDMPanel ? '#E8D9BC' : 'var(--ink)',
       border: isDMPanel ? '2px solid #D4A017' : '2px solid var(--ink-faded)',
+      ...extraStyle,
     }}>
       <div style={styles.panelHeader}>
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
@@ -28,7 +29,8 @@ function Panel({ title, onClose, children, isDMPanel }) {
   );
 }
 
-export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role, mapOwner }) {
+export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role, mapOwner, isMobile }) {
+  const panelExtra = isMobile ? { minWidth: 'unset', maxWidth: 'unset', width: '100%', borderRadius: '12px 12px 0 0', boxShadow: 'none', border: 'none', borderTop: '2px solid var(--gold)' } : {};
   const [data, setData] = useState(hexData || {});
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -87,7 +89,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Terrain ----
   if (panelType === 'terrain') {
     return (
-      <Panel title="Terrain" onClose={onClose}>
+      <Panel title="Terrain" onClose={onClose} extraStyle={panelExtra}>
         <div style={styles.terrainGrid}>
           {TERRAIN_LIST.map(t => (
             <button key={t} onClick={() => save({ terrain: t })}
@@ -109,7 +111,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- POI ----
   if (panelType === 'poi') {
     return (
-      <Panel title="Point of Interest" onClose={onClose}>
+      <Panel title="Point of Interest" onClose={onClose} extraStyle={panelExtra}>
         <input
           placeholder="POI name (optional)"
           value={data.poi_name || ''}
@@ -176,7 +178,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Features" onClose={onClose}>
+      <Panel title="Features" onClose={onClose} extraStyle={panelExtra}>
         {FEATURE_TYPES.map(fType => {
           const existing = features.find(f => f.type === fType);
           const activeEdges = existing?.edges || [];
@@ -206,7 +208,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Status ----
   if (panelType === 'status') {
     return (
-      <Panel title="Hex Status" onClose={onClose}>
+      <Panel title="Hex Status" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {Object.entries(STATUS_COLORS).map(([s, c]) => (
             <button key={s} onClick={() => save({ status: s })}
@@ -240,7 +242,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Dangers" onClose={onClose}>
+      <Panel title="Dangers" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ marginBottom: 12 }}>
           {dangers.map(d => (
             <div key={d.id} style={styles.listItem}>
@@ -303,7 +305,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Organizations" onClose={onClose}>
+      <Panel title="Organizations" onClose={onClose} extraStyle={panelExtra}>
         {factions.map(f => (
           <div key={f.id} style={styles.listItem}>
             <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: f.color, marginRight: 6 }} />
@@ -331,7 +333,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Resources" onClose={onClose}>
+      <Panel title="Resources" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
           {RESOURCE_TYPES.map(r => (
             <button key={r} onClick={() => toggleResource(r)}
@@ -364,7 +366,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Rumors & Hooks" onClose={onClose}>
+      <Panel title="Rumors & Hooks" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ marginBottom: 10 }}>
           {rumors.map(r => (
             <div key={r.id} style={styles.listItem}>
@@ -402,7 +404,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Events" onClose={onClose}>
+      <Panel title="Events" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
           {sorted.map(ev => (
             <div key={ev.id} style={styles.listItem}>
@@ -448,7 +450,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="NPCs" onClose={onClose}>
+      <Panel title="NPCs" onClose={onClose} extraStyle={panelExtra}>
         <div style={{ marginBottom: 12 }}>
           {npcs.map(n => (
             <div key={n.id} style={styles.listItem}>
@@ -505,7 +507,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Notes ----
   if (panelType === 'notes') {
     return (
-      <Panel title="Notes" onClose={onClose}>
+      <Panel title="Notes" onClose={onClose} extraStyle={panelExtra}>
         <textarea value={notes} onChange={e => setNotes(e.target.value)}
           placeholder="General notes…" style={{ ...styles.textarea, height: 160 }} />
         <button onClick={() => save({ notes })} style={styles.addBtn}>Save Notes</button>
@@ -517,7 +519,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Secrets (DM only) ----
   if (panelType === 'secrets') {
     return (
-      <Panel title="Secrets" onClose={onClose} isDMPanel>
+      <Panel title="Secrets" onClose={onClose} isDMPanel extraStyle={panelExtra}>
         <p style={{ fontSize: 12, marginBottom: 8, color: '#C4B090', fontStyle: 'italic' }}>
           🔒 Visible to DM only. Hidden from players.
         </p>
