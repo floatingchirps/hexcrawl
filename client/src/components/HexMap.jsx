@@ -25,49 +25,59 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
 
   // Feature lines
   const features = useMemo(() => {
-    try { return JSON.parse(data?.features || '[]'); } catch { return []; }
+    try {
+      const p = JSON.parse(data?.features || '[]');
+      return Array.isArray(p) ? p : [];
+    } catch { return []; }
   }, [data?.features]);
 
   const edgeMidpoints = hexEdgeMidpoints(cx, cy, SIZE);
 
   function renderFeature(f, i) {
-    let stroke = '#8B6914', width = 2, dashArray = null;
-    if (f.type === 'road') { stroke = '#A0897A'; width = 2.5; }
-    else if (f.type === 'river') { stroke = '#7AACCF'; width = 2.5; }
-    else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '4,3'; }
-    else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 3; }
+    try {
+      let stroke = '#8B6914', width = 2, dashArray = null;
+      if (f.type === 'road') { stroke = '#A0897A'; width = 2.5; }
+      else if (f.type === 'river') { stroke = '#7AACCF'; width = 2.5; }
+      else if (f.type === 'trail') { stroke = '#8B6914'; dashArray = '4,3'; }
+      else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 3; }
 
-    // New corner-to-corner format: straight line
-    if (f.from !== undefined && f.to !== undefined) {
-      const [x1, y1] = corners6[f.from];
-      const [x2, y2] = corners6[f.to];
-      const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
-      return (
-        <path key={i} d={pathD} stroke={stroke} strokeWidth={width}
-          strokeDasharray={dashArray} fill="none" strokeLinecap="round" />
-      );
-    }
+      // Corner-to-corner format: straight line
+      if (f.from != null && f.to != null) {
+        const from = Math.round(Number(f.from));
+        const to = Math.round(Number(f.to));
+        if (from < 0 || from > 5 || to < 0 || to > 5 || !isFinite(from) || !isFinite(to)) return null;
+        const c1 = corners6[from], c2 = corners6[to];
+        if (!c1 || !c2) return null;
+        const [x1, y1] = c1, [x2, y2] = c2;
+        const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
+        return <path key={i} d={pathD} stroke={stroke} strokeWidth={width} strokeDasharray={dashArray} fill="none" strokeLinecap="round" />;
+      }
 
-    // Legacy edge-midpoint format
-    const edges = f.edges || [];
-    if (edges.length < 2) return null;
-    const points = edges.map(e => edgeMidpoints[e]);
-    const pathD = points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-    return (
-      <path key={i} d={pathD} stroke={stroke} strokeWidth={width}
-        strokeDasharray={dashArray} fill="none" strokeLinecap="round" />
-    );
+      // Legacy edge-midpoint format
+      const edges = f.edges || [];
+      if (edges.length < 2) return null;
+      const points = edges.map(e => edgeMidpoints[e]);
+      if (points.some(p => !p)) return null;
+      const pathD = points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+      return <path key={i} d={pathD} stroke={stroke} strokeWidth={width} strokeDasharray={dashArray} fill="none" strokeLinecap="round" />;
+    } catch { return null; }
   }
 
   // Faction tint
   const factions = useMemo(() => {
-    try { return JSON.parse(data?.factions || '[]'); } catch { return []; }
+    try {
+      const p = JSON.parse(data?.factions || '[]');
+      return Array.isArray(p) ? p : [];
+    } catch { return []; }
   }, [data?.factions]);
   const factionColor = factions[0]?.color;
 
   // Dangers — compute max severity for glow
   const dangers = useMemo(() => {
-    try { return JSON.parse(data?.dangers || '[]'); } catch { return []; }
+    try {
+      const p = JSON.parse(data?.dangers || '[]');
+      return Array.isArray(p) ? p : [];
+    } catch { return []; }
   }, [data?.dangers]);
   const SEVERITY_LEVELS = { Minor: 1, Moderate: 2, Severe: 3, Deadly: 4 };
   const maxSeverity = dangers.reduce((max, d) => Math.max(max, SEVERITY_LEVELS[d.severity] || 0), 0);
