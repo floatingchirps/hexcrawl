@@ -66,12 +66,11 @@ export default function App() {
     setRadialMenu({ x, y, hexLabel: label });
   }
 
-  // Handle SVG click to get position
-  const mapRef = useRef(null);
-  function handleHexClickWithPos(label, e) {
+  // Handle hex click with position from HexMap
+  function handleHexClickWithPos(label, pos) {
     if (editPanel && editPanel.hexLabel !== label) setEditPanel(null);
-    const x = e?.clientX || window.innerWidth / 2;
-    const y = e?.clientY || window.innerHeight / 2;
+    const x = pos?.x ?? window.innerWidth / 2;
+    const y = pos?.y ?? window.innerHeight / 2;
     setRadialMenu({ x, y, hexLabel: label });
   }
 
@@ -110,11 +109,11 @@ export default function App() {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       {/* Map */}
-      <HexMapWithClick
+      <HexMap
         hexData={hexData}
         ringCount={ringCount}
         role={role}
-        onHexClickWithPos={handleHexClickWithPos}
+        onHexClick={handleHexClickWithPos}
       />
 
       {/* Radial menu */}
@@ -168,31 +167,6 @@ export default function App() {
       {onboardingNeeded && (
         <OnboardingModal onComplete={handleOnboardingComplete} />
       )}
-    </div>
-  );
-}
-
-// Wrapper to capture mouse position on hex click
-function HexMapWithClick({ hexData, ringCount, role, onHexClickWithPos }) {
-  const svgWrapperRef = useRef(null);
-  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
-
-  function handleMouseMove(e) {
-    setLastMousePos({ x: e.clientX, y: e.clientY });
-  }
-
-  return (
-    <div
-      ref={svgWrapperRef}
-      style={{ width: '100%', height: '100%' }}
-      onMouseMove={handleMouseMove}
-    >
-      <HexMap
-        hexData={hexData}
-        ringCount={ringCount}
-        role={role}
-        onHexClick={(label) => onHexClickWithPos(label, lastMousePos)}
-      />
     </div>
   );
 }

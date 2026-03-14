@@ -72,7 +72,7 @@ function HexTile({ hex, data, isCenter, onClick, onHover, onHoverEnd, role }) {
 
   return (
     <g
-      onClick={() => onClick(label)}
+      onClick={() => onClick(label, cx, cy)}
       onMouseEnter={() => onHover(label, data)}
       onMouseLeave={onHoverEnd}
       style={{ cursor: 'pointer' }}
@@ -227,6 +227,13 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
     });
   }
 
+  function handleHexClickWithScreenPos(label, cx, cy) {
+    // Convert hex map coordinates to screen coordinates
+    const screenX = cx * transform.scale + transform.x;
+    const screenY = cy * transform.scale + transform.y;
+    onHexClick(label, { x: screenX, y: screenY });
+  }
+
   function handleHover(label, data) {
     const terrain = data?.terrain || 'Unexplored';
     const name = data?.poi_name ? ` — ${data.poi_name}` : '';
@@ -257,7 +264,7 @@ export default function HexMap({ hexData, ringCount, role, onHexClick }) {
               hex={hex}
               data={hexMap[hex.label]}
               isCenter={hex.label === '0'}
-              onClick={onHexClick}
+              onClick={handleHexClickWithScreenPos}
               onHover={handleHover}
               onHoverEnd={handleHoverEnd}
               role={role}

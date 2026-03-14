@@ -84,7 +84,7 @@ async function initSchema() {
 // --- Hex coordinate generation (same logic as before) ---
 function getRingHexesWithLabels(ringNum) {
   if (ringNum === 0) return [{ q: 0, r: 0, label: '0' }];
-  const directions = [[0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1], [1, 0]];
+  const directions = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
   const cornerLabels = ['N', 'NE', 'SE', 'S', 'SW', 'NW'];
   let q = 0, r = -ringNum;
   const hexes = [];
@@ -139,14 +139,17 @@ async function updateHex(label, updates) {
 
   const now = new Date().toISOString();
 
+  // Merge explored=1 as default so updates can override it without duplicating
+  const merged = { explored: 1, ...updates };
+
   if (!existing) {
-    const keys = Object.keys(updates);
-    const vals = Object.values(updates);
-    const cols = ['label', ...keys, 'updated_at', 'explored'].join(', ');
-    const placeholders = ['$1', ...keys.map((_, i) => `$${i + 2}`), `$${keys.length + 2}`, `$${keys.length + 3}`].join(', ');
+    const keys = Object.keys(merged);
+    const vals = Object.values(merged);
+    const cols = ['label', ...keys, 'updated_at'].join(', ');
+    const placeholders = ['$1', ...keys.map((_, i) => `$${i + 2}`), `$${keys.length + 2}`].join(', ');
     await query(
       `INSERT INTO hexes (${cols}) VALUES (${placeholders}) ON CONFLICT (label) DO NOTHING`,
-      [label, ...vals, now, 1]
+      [label, ...vals, now]
     );
   } else {
     // Log history for changed fields
@@ -160,10 +163,10 @@ async function updateHex(label, updates) {
       }
     }
 
-    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
-    const vals = Object.values(updates);
+    const setClauses = Object.keys(merged).map((k, i) => `${k} = $${i + 1}`).join(', ');
+    const vals = Object.values(merged);
     await query(
-      `UPDATE hexes SET ${setClauses}, updated_at = $${vals.length + 1}, explored = 1 WHERE label = $${vals.length + 2}`,
+      `UPDATE hexes SET ${setClauses}, updated_at = $${vals.length + 1} WHERE label = $${vals.length + 2}`,
       [...vals, now, label]
     );
   }

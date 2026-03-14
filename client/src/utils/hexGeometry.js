@@ -105,9 +105,9 @@ function getRingAxialCoords(ringNum) {
 // Better: assign clean labels based on dominant direction
 export function getRingHexesWithLabels(ringNum) {
   if (ringNum === 0) return [{ q: 0, r: 0, label: '0' }];
-  
+
   const directions = [
-    [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1], [1, 0]
+    [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]
   ];
   const cornerLabels = ['N', 'NE', 'SE', 'S', 'SW', 'NW'];
   
