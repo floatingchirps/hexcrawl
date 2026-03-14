@@ -43,6 +43,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [loreTab, setLoreTab] = useState('edit');
   const [notes, setNotes] = useState('');
   const [secrets, setSecrets] = useState('');
+  const [newNPC, setNewNPC] = useState({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
 
   useEffect(() => {
     setData(hexData || {});
@@ -53,6 +54,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setNewDanger({ category: 'Environment', severity: 'Minor', details: '' });
     setNewFactionName('');
     setNewRumor('');
+    setNewNPC({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
     setLoreTab('edit');
   }, [hexData, hexLabel, panelType]);
 
@@ -397,6 +399,79 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
             ))}
           </div>
         )}
+        {saving && <p style={styles.saving}>Saving…</p>}
+      </Panel>
+    );
+  }
+
+  // ---- NPCs ----
+  if (panelType === 'npcs') {
+    const npcs = parseJSON(data.npcs, []);
+    const NPC_TYPES = ['Humanoid', 'Animal', 'Other'];
+    const DISPOSITIONS = ['Friendly', 'Neutral', 'Hostile'];
+    const DISP_COLORS = { Friendly: '#2A6B2A', Neutral: '#8B6914', Hostile: '#8B2020' };
+
+    function addNPC() {
+      if (!newNPC.name.trim()) return;
+      const updated = [...npcs, { ...newNPC, id: Date.now() }];
+      save({ npcs: JSON.stringify(updated) });
+      setNewNPC({ name: '', species: '', type: 'Humanoid', disposition: 'Neutral', details: '' });
+    }
+
+    function removeNPC(id) {
+      save({ npcs: JSON.stringify(npcs.filter(n => n.id !== id)) });
+    }
+
+    return (
+      <Panel title="NPCs" onClose={onClose}>
+        <div style={{ marginBottom: 12 }}>
+          {npcs.map(n => (
+            <div key={n.id} style={styles.listItem}>
+              <div>
+                <strong style={{ fontSize: 13 }}>{n.name}</strong>
+                <span style={{ fontSize: 11, color: 'var(--ink-light)', marginLeft: 6 }}>{n.species || n.type}</span>
+                <span style={{ fontSize: 11, marginLeft: 6, color: DISP_COLORS[n.disposition] }}>{n.disposition}</span>
+                {n.details && <p style={{ fontSize: 12, marginTop: 2, color: 'var(--ink-light)' }}>{n.details}</p>}
+              </div>
+              <button onClick={() => removeNPC(n.id)} style={styles.deleteBtn}>✕</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input value={newNPC.name} onChange={e => setNewNPC(d => ({ ...d, name: e.target.value }))}
+            placeholder="Name" style={styles.input} />
+          <input value={newNPC.species} onChange={e => setNewNPC(d => ({ ...d, species: e.target.value }))}
+            placeholder="Species (e.g. Human, Elf, Wolf)" style={styles.input} />
+          <div style={styles.catLabel}>Type</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {NPC_TYPES.map(t => (
+              <button key={t} onClick={() => setNewNPC(d => ({ ...d, type: t }))}
+                style={{
+                  flex: 1, padding: '5px 4px', borderRadius: 3, fontSize: 10,
+                  fontFamily: 'var(--font-heading)', cursor: 'pointer', textAlign: 'center',
+                  background: newNPC.type === t ? 'var(--gold-dark)' : 'var(--parchment-light)',
+                  color: newNPC.type === t ? 'white' : 'var(--ink)',
+                  border: `1.5px solid ${newNPC.type === t ? 'var(--gold-dark)' : 'var(--ink-faded)'}`,
+                }}>{t}</button>
+            ))}
+          </div>
+          <div style={styles.catLabel}>Disposition</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {DISPOSITIONS.map(d => (
+              <button key={d} onClick={() => setNewNPC(n => ({ ...n, disposition: d }))}
+                style={{
+                  flex: 1, padding: '5px 4px', borderRadius: 3, fontSize: 10,
+                  fontFamily: 'var(--font-heading)', cursor: 'pointer', textAlign: 'center',
+                  background: newNPC.disposition === d ? (DISP_COLORS[d]) : 'var(--parchment-light)',
+                  color: newNPC.disposition === d ? 'white' : 'var(--ink)',
+                  border: `1.5px solid ${newNPC.disposition === d ? DISP_COLORS[d] : 'var(--ink-faded)'}`,
+                }}>{d}</button>
+            ))}
+          </div>
+          <textarea value={newNPC.details} onChange={e => setNewNPC(d => ({ ...d, details: e.target.value }))}
+            placeholder="Additional details…" style={{ ...styles.textarea, height: 60 }} />
+          <button onClick={addNPC} style={styles.addBtn}>+ Add NPC</button>
+        </div>
         {saving && <p style={styles.saving}>Saving…</p>}
       </Panel>
     );

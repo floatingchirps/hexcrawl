@@ -38,6 +38,7 @@ async function initSchema() {
       status TEXT DEFAULT 'unknown',
       notes TEXT DEFAULT '',
       secrets TEXT DEFAULT '',
+      npcs TEXT DEFAULT '[]',
       explored INTEGER DEFAULT 0,
       ring INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
@@ -77,6 +78,11 @@ async function initSchema() {
       await query(`ALTER TABLE hex_history ADD COLUMN map_owner TEXT DEFAULT 'shared'`);
     }
   } catch (_) { /* column already exists or table was created with it */ }
+
+  // Migration: add npcs column if not exists
+  try {
+    await query(`ALTER TABLE hexes ADD COLUMN IF NOT EXISTS npcs TEXT DEFAULT '[]'`);
+  } catch (_) { /* already exists */ }
 
   // Defaults for shared map
   await query(`INSERT INTO map_meta (key, value) VALUES ('current_ring_count', '0') ON CONFLICT (key) DO NOTHING`);

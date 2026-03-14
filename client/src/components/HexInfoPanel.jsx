@@ -13,6 +13,7 @@ const ALL_SECTIONS = [
   { id: 'resources', label: 'Resources', icon: '◈' },
   { id: 'rumors', label: 'Rumors', icon: '✉' },
   { id: 'history', label: 'History & Lore', icon: '📜' },
+  { id: 'npcs', label: 'NPCs', icon: '👤' },
   { id: 'notes', label: 'Notes', icon: '✎' },
   { id: 'secrets', label: 'Secrets', icon: '🔒' },
 ];
@@ -51,6 +52,10 @@ function hasData(data, sectionId) {
       return r.length > 0;
     }
     case 'history': return !!(data.history_lore && data.history_lore.trim());
+    case 'npcs': {
+      const n = parseJSON(data.npcs, []);
+      return n.length > 0;
+    }
     case 'notes': return !!(data.notes && data.notes.trim());
     case 'secrets': return !!(data.secrets && data.secrets.trim());
     default: return false;
@@ -155,6 +160,24 @@ function SectionContent({ sectionId, data }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {rumors.map((r, i) => (
             <p key={r.id || i} style={{ fontSize: 13, fontStyle: 'italic' }}>"{r.text}"</p>
+          ))}
+        </div>
+      );
+    }
+    case 'npcs': {
+      const npcs = parseJSON(data.npcs, []);
+      const DISP_COLORS = { Friendly: '#2A6B2A', Neutral: '#8B6914', Hostile: '#8B2020' };
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {npcs.map((npc, i) => (
+            <div key={npc.id || i} style={{ fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>{npc.name || 'Unnamed'}</span>
+              <span style={{ color: 'var(--ink-light)', marginLeft: 6 }}>{npc.species || npc.type}</span>
+              <span style={{ marginLeft: 6, fontSize: 11, color: DISP_COLORS[npc.disposition] || 'var(--ink-light)' }}>
+                {npc.disposition}
+              </span>
+              {npc.details && <p style={{ marginTop: 2, fontSize: 12, color: 'var(--ink-light)' }}>{npc.details}</p>}
+            </div>
           ))}
         </div>
       );
