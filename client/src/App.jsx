@@ -217,7 +217,7 @@ export default function App() {
   const sidebarWidth = 300;
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', touchAction: 'manipulation' }}>
       {/* ─── Titlebar ─── */}
       <div style={{
         ...styles.titlebar,

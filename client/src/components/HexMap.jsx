@@ -421,7 +421,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
         ref={svgRef}
         width="100%"
         height="100%"
-        style={{ cursor: dragging ? 'grabbing' : 'default', display: 'block', touchAction: 'none' }}
+        style={{ cursor: dragging ? 'grabbing' : 'default', display: 'block', touchAction: 'none', userSelect: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
