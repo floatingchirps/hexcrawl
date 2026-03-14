@@ -63,11 +63,14 @@ function BackBtn({ bx, by, size, onClick }) {
   );
 }
 
-export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply, onStatusApply, onClose, role }) {
+export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply, onStatusApply, onClose, role, copyLabel, onCopyApply }) {
   const ref = useRef(null);
   // null | 'terrain' | 'poi_category' | { type: 'poi_types', category: string }
   const [submenu, setSubmenu] = useState(null);
-  const segments = role === 'dm' ? SEGMENTS : SEGMENTS.filter(s => s.id !== 'secrets');
+  const baseSegments = role === 'dm' ? SEGMENTS : SEGMENTS.filter(s => s.id !== 'secrets');
+  const segments = copyLabel
+    ? [...baseSegments, { id: 'copy', label: copyLabel, icon: '⇄', color: '#2A6B4A' }]
+    : baseSegments;
 
   useEffect(() => {
     function handleKey(e) {
@@ -98,6 +101,7 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
     if (segId === 'terrain') setSubmenu('terrain');
     else if (segId === 'poi') setSubmenu('poi_category');
     else if (segId === 'status') setSubmenu('status');
+    else if (segId === 'copy' && onCopyApply) onCopyApply();
     else onSelect(segId);
   }
 

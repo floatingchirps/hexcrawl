@@ -6,7 +6,7 @@ import RadialMenu from './components/RadialMenu';
 import HexEditPanel from './components/HexEditPanel';
 import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
-import { getStoredRole, logout, fetchHexes, fetchMeta, updateHex } from './utils/api';
+import { getStoredRole, logout, fetchHexes, fetchMeta, fetchHex, updateHex } from './utils/api';
 
 const TITLEBAR_HEIGHT = 48;
 
@@ -170,6 +170,26 @@ export default function App() {
       setHexData(prev => prev.map(h => h.label === result.label ? result : h));
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  // Copy hex data from the other map (DM only)
+  async function handleCopyHex() {
+    if (!radialMenu) return;
+    const hexLabel = radialMenu.hexLabel;
+    const sourceMap = currentMap === 'dm' ? 'shared' : 'dm';
+    setRadialMenu(null);
+    try {
+      const sourceHex = await fetchHex(hexLabel, sourceMap);
+      if (!sourceHex) { console.warn('Source hex not found'); return; }
+      const COPY_FIELDS = ['terrain', 'poi_type', 'poi_name', 'features', 'dangers',
+        'factions', 'resources', 'rumors', 'history_lore', 'status', 'notes', 'npcs', 'explored'];
+      const updates = {};
+      COPY_FIELDS.forEach(f => { if (sourceHex[f] !== undefined) updates[f] = sourceHex[f]; });
+      const result = await updateHex(hexLabel, updates, currentMap);
+      setHexData(prev => prev.map(h => h.label === result.label ? result : h));
+    } catch (err) {
+      console.error('Copy hex failed:', err);
     }
   }
 
@@ -341,6 +361,8 @@ export default function App() {
           onStatusApply={handleStatusApply}
           onClose={() => setRadialMenu(null)}
           role={role}
+          copyLabel={role === 'dm' ? (currentMap === 'dm' ? '← Player' : '← DM') : null}
+          onCopyApply={role === 'dm' ? handleCopyHex : null}
         />
       )}
 
