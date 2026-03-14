@@ -4,7 +4,7 @@ import POIIcon from './POIIcons';
 
 const SIZE = HEX_SIZE;
 
-function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onHover, onHoverEnd, role }) {
+function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onContextMenu, onHover, onHoverEnd, role }) {
   if (!hex) return null;
   const { cx, cy, label } = hex;
 
@@ -14,6 +14,10 @@ function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onH
   const status = data?.status || 'unknown';
   const statusColor = STATUS_COLORS[status] || '#888';
   const isExplored = explored === 1 || explored === '1' || explored === true;
+
+  // Hide completely transparent hexes (too far from any terrain)
+  const opacity = isSelected ? 1 : (isExplored ? 1 : fadeOpacity);
+  if (opacity <= 0 && !isSelected) return null;
 
   const corners = hexCornerPoints(cx, cy);
 
@@ -81,6 +85,7 @@ function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onH
       onMouseEnter={() => onHover(label, data)}
       onMouseLeave={onHoverEnd}
       style={{ cursor: 'pointer' }}
+      opacity={opacity}
     >
       {/* Selection glow */}
       {isSelected && (
@@ -155,6 +160,62 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
     hexData.forEach(h => m[h.label] = h);
     return m;
   }, [hexData]);
+
+  // Compute opacity for each hex based on distance to nearest hex with terrain
+  const fadeMap = useMemo(() => {
+    const NEIGHBOR_DIRS = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+    // Build coord→label lookup
+    const coordToLabel = {};
+    hexLayout.forEach(h => {
+      if (h.q !== undefined && h.r !== undefined) {
+        coordToLabel[`${h.q},${h.r}`] = h.label;
+      }
+    });
+    const labelToCoord = {};
+    hexLayout.forEach(h => {
+      if (h.q !== undefined && h.r !== undefined) {
+        labelToCoord[h.label] = [h.q, h.r];
+      }
+    });
+
+    // BFS from all hexes that have terrain data
+    const dist = {};
+    const queue = [];
+    hexLayout.forEach(h => {
+      const d = hexMap[h.label];
+      const hasTerrain = d?.terrain;
+      if (hasTerrain) {
+        dist[h.label] = 0;
+        queue.push(h.label);
+      }
+    });
+
+    let qi = 0;
+    while (qi < queue.length) {
+      const label = queue[qi++];
+      const coord = labelToCoord[label];
+      if (!coord) continue;
+      const [q, r] = coord;
+      for (const [dq, dr] of NEIGHBOR_DIRS) {
+        const nKey = `${q + dq},${r + dr}`;
+        const nLabel = coordToLabel[nKey];
+        if (nLabel && dist[nLabel] === undefined) {
+          dist[nLabel] = dist[label] + 1;
+          queue.push(nLabel);
+        }
+      }
+    }
+
+    // Convert distance to opacity
+    const result = {};
+    hexLayout.forEach(h => {
+      const d = dist[h.label];
+      if (d === undefined || d >= 4) result[h.label] = 0;
+      else if (d === 0) result[h.label] = 1;
+      else result[h.label] = Math.pow(0.5, d); // 0.5, 0.25, 0.125
+    });
+    return result;
+  }, [hexLayout, hexMap]);
 
   // Fit to canvas
   const fitToCanvas = useCallback(() => {
@@ -293,6 +354,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, onHexSel
               data={hexMap[hex.label]}
               isCenter={hex.label === '0'}
               isSelected={selectedHex === hex.label}
+              fadeOpacity={fadeMap[hex.label] ?? 0}
               onSelect={onHexSelect}
               onContextMenu={handleHexContextMenuWithScreenPos}
               onHover={handleHover}
