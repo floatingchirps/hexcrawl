@@ -96,10 +96,6 @@ function HexTile({ hex, data, isCenter, isSelected, onSelect, onContextMenu, onH
         strokeWidth={strokeW}
       />
 
-      {/* Faction tint */}
-      {factionColor && isExplored && (
-        <polygon points={corners} fill={factionColor} opacity="0.25" />
-      )}
 
       {/* Fog overlay */}
       {!isExplored && (

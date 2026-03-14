@@ -9,7 +9,7 @@ const ALL_SECTIONS = [
   { id: 'features', label: 'Features', icon: '~' },
   { id: 'status', label: 'Status', icon: '◉' },
   { id: 'dangers', label: 'Dangers', icon: '⚠' },
-  { id: 'factions', label: 'Factions', icon: '⚔' },
+  { id: 'factions', label: 'Organizations', icon: '⚔' },
   { id: 'resources', label: 'Resources', icon: '◈' },
   { id: 'rumors', label: 'Rumors', icon: '✉' },
   { id: 'history', label: 'History & Lore', icon: '📜' },

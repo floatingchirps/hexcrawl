@@ -270,7 +270,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     }
 
     return (
-      <Panel title="Factions" onClose={onClose}>
+      <Panel title="Organizations" onClose={onClose}>
         {factions.map(f => (
           <div key={f.id} style={styles.listItem}>
             <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: f.color, marginRight: 6 }} />
@@ -279,10 +279,10 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
           </div>
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <input value={newFactionName} onChange={e => setNewFactionName(e.target.value)} placeholder="Faction name" style={{ ...styles.input, flex: 1 }} />
+          <input value={newFactionName} onChange={e => setNewFactionName(e.target.value)} placeholder="Organization name" style={{ ...styles.input, flex: 1 }} />
           <input type="color" value={newFactionColor} onChange={e => setNewFactionColor(e.target.value)} style={{ width: 36, padding: 2, border: '1px solid var(--ink-faded)', borderRadius: 3 }} />
         </div>
-        <button onClick={addFaction} style={{ ...styles.addBtn, marginTop: 8 }}>+ Add Faction</button>
+        <button onClick={addFaction} style={{ ...styles.addBtn, marginTop: 8 }}>+ Add Organization</button>
         {saving && <p style={styles.saving}>Saving…</p>}
       </Panel>
     );
