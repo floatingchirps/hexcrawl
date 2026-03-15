@@ -58,14 +58,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
     } catch { return []; }
   }, [data?.factions]);
 
-  // Dangers — hook must be before any conditional return
-  const dangers = useMemo(() => {
-    try {
-      const p = JSON.parse(data?.dangers || '[]');
-      return Array.isArray(p) ? p : [];
-    } catch { return []; }
-  }, [data?.dangers]);
-
   if (!hex) return null; // safe: all hooks already called above
 
   const terrain = data?.terrain;
@@ -79,11 +71,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
 
   const corners = hexCornerPoints(cx, cy);
   const factionColor = factions[0]?.color;
-
-  const SEVERITY_LEVELS = { Minor: 1, Moderate: 2, Severe: 3, Deadly: 4 };
-  const maxSeverity = dangers.reduce((max, d) => Math.max(max, SEVERITY_LEVELS[d.severity] || 0), 0);
-  const dangerGlowRadius = maxSeverity > 0 ? [0, 0.2, 0.4, 0.6, 0.85][maxSeverity] : 0;
-  const dangerGlowId = dangerGlowRadius > 0 ? `danger-glow-${label.replace(/[^a-zA-Z0-9]/g, '_')}` : null;
 
   // Selection stroke
   const strokeColor = isSelected ? '#D4A017' : isCenter ? '#D4A017' : (isExplored ? 'rgba(139,105,20,0.25)' : 'rgba(196,176,144,0.35)');
@@ -117,20 +104,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         strokeWidth={strokeW}
       />
 
-
-      {/* Danger glow */}
-      {dangerGlowId && isExplored && (
-        <>
-          <defs>
-            <radialGradient id={dangerGlowId}>
-              <stop offset="0%" stopColor="transparent" />
-              <stop offset={`${(1 - dangerGlowRadius) * 100}%`} stopColor="transparent" />
-              <stop offset="100%" stopColor="rgba(180,30,30,0.35)" />
-            </radialGradient>
-          </defs>
-          <polygon points={corners} fill={`url(#${dangerGlowId})`} />
-        </>
-      )}
 
       {/* Fog overlay */}
       {!isExplored && (
@@ -200,7 +173,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   const [drawingPath, setDrawingPath] = useState([]);
   const [mousePos, setMousePos] = useState(null);
   const [deleteMode, setDeleteMode] = useState(false);
-  const [deletePending, setDeletePending] = useState(null);
+  const [hoveredFeature, setHoveredFeature] = useState(null); // { type, index }
   // Ref for non-passive touch handler so we can disable pan in feature mode
   const featureDrawModeRef = useRef(false);
   useEffect(() => { featureDrawModeRef.current = featureDrawMode; }, [featureDrawMode]);
@@ -380,38 +353,15 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
     setDrawingPath([]);
   }
 
-  function handleDeleteEdge(p1, p2) {
-    const k1 = ptKey(p1), k2 = ptKey(p2);
-    const polylines = ((mapFeatures || {})[featureType] || []);
-    const newPolylines = [];
-    for (const poly of polylines) {
-      let splitIdx = -1;
-      for (let i = 0; i < poly.length - 1; i++) {
-        const ak = ptKey(poly[i]), bk = ptKey(poly[i + 1]);
-        if ((ak === k1 && bk === k2) || (ak === k2 && bk === k1)) { splitIdx = i; break; }
-      }
-      if (splitIdx === -1) {
-        newPolylines.push(poly);
-      } else {
-        const before = poly.slice(0, splitIdx + 1);
-        const after = poly.slice(splitIdx + 1);
-        if (before.length >= 2) newPolylines.push(before);
-        if (after.length >= 2) newPolylines.push(after);
-      }
-    }
-    onSaveMapFeatures({ ...(mapFeatures || {}), [featureType]: newPolylines });
+  function handleDeletePolyline(type, index) {
+    const updated = { ...(mapFeatures || {}) };
+    updated[type] = (updated[type] || []).filter((_, j) => j !== index);
+    onSaveMapFeatures(updated);
+    setHoveredFeature(null);
   }
 
   function handleSnapClick(pt) {
-    if (deleteMode) {
-      if (!deletePending) {
-        setDeletePending(pt);
-      } else {
-        handleDeleteEdge(deletePending, pt);
-        setDeletePending(null);
-      }
-      return;
-    }
+    // In delete mode, snap circles are hidden — clicks go to polyline handlers
     // If clicking last added point again with 2+ points — commit
     if (drawingPath.length >= 2 && ptKey(drawingPath[drawingPath.length - 1]) === ptKey(pt)) {
       commitDrawingPath(drawingPath);
@@ -425,7 +375,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
       // Exiting: discard any in-progress path
       setDrawingPath([]);
       setDeleteMode(false);
-      setDeletePending(null);
+      setHoveredFeature(null);
       setMousePos(null);
     }
     setFeatureDrawMode(v => !v);
@@ -433,7 +383,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
 
   // Pan: right-click drag (button 2) or middle-click drag (button 1)
   function handleMouseDown(e) {
-    if (featureDrawMode) return; // block pan while drawing
+    if (featureDrawMode && e.button !== 1) return; // block right-click pan in feature mode; allow middle-click
     if (e.button === 2 || e.button === 1) {
       e.preventDefault();
       setDragging(true);
@@ -573,10 +523,9 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
       setDrawingPath([]);
     } else if (deleteMode) {
       setDeleteMode(false);
-      setDeletePending(null);
+      setHoveredFeature(null);
     } else {
       setDeleteMode(true);
-      setDeletePending(null);
     }
   }
 
@@ -618,6 +567,11 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        <defs>
+          <filter id="danger-glow-filter" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="7" />
+          </filter>
+        </defs>
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
           {hexLayout.map(hex => (
             <HexTile
@@ -664,58 +618,109 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
             })
           )}
 
+          {/* Danger glow layer — above features, extends beyond hex boundaries */}
+          {hexLayout.map(hex => {
+            const data = hexMap[hex.label];
+            if (!data?.explored) return null;
+            let dangers;
+            try { dangers = JSON.parse(data.dangers || '[]'); } catch { return null; }
+            if (!Array.isArray(dangers) || dangers.length === 0) return null;
+            const SEVERITY_LEVELS = { Minor: 1, Moderate: 2, Severe: 3, Deadly: 4 };
+            const maxSeverity = dangers.reduce((max, d) => Math.max(max, SEVERITY_LEVELS[d.severity] || 0), 0);
+            if (maxSeverity === 0) return null;
+            const alpha = [0, 0.22, 0.38, 0.55, 0.72][maxSeverity];
+            return (
+              <circle
+                key={`dglow-${hex.label}`}
+                cx={hex.cx} cy={hex.cy}
+                r={SIZE * 0.88}
+                fill={`rgba(180,30,30,${alpha})`}
+                filter="url(#danger-glow-filter)"
+                pointerEvents="none"
+              />
+            );
+          })}
+
           {/* Feature draw mode overlay */}
           {featureDrawMode && (() => {
             const style = FEATURE_STYLES[featureType] || { stroke: '#888', width: 2 };
             const snapR = Math.max(4, 5 / transform.scale);
             return (
               <>
-                {/* Dark overlay */}
+                {/* Dark overlay — intercepts background clicks */}
                 <rect x="-99999" y="-99999" width="199998" height="199998"
                   fill="rgba(0,0,0,0.45)" pointerEvents="all"
                   onClick={(e) => { e.stopPropagation(); }}
                 />
 
-                {/* Committed drawing path so far */}
-                {drawingPath.length >= 2 && (
-                  <polyline
-                    points={drawingPath.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}
-                    fill="none" stroke={style.stroke} strokeWidth={style.width}
-                    strokeDasharray={style.dash} strokeLinecap="round"
-                    pointerEvents="none"
-                  />
-                )}
+                {deleteMode ? (
+                  /* ── Delete mode: show all paths as clickable red targets ── */
+                  <>
+                    {FEATURE_TYPES.flatMap(ftype =>
+                      ((mapFeatures || {})[ftype] || []).map((polyline, i) => {
+                        const fstyle = FEATURE_STYLES[ftype];
+                        const isHovered = hoveredFeature?.type === ftype && hoveredFeature?.index === i;
+                        const pts = polyline.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+                        return (
+                          <polyline
+                            key={`del-${ftype}-${i}`}
+                            points={pts}
+                            fill="none"
+                            stroke={isHovered ? '#D94040' : 'rgba(210,60,60,0.55)'}
+                            strokeWidth={fstyle.width + (isHovered ? 7 : 5)}
+                            strokeLinecap="round"
+                            style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                            onMouseEnter={() => setHoveredFeature({ type: ftype, index: i })}
+                            onMouseLeave={() => setHoveredFeature(null)}
+                            onClick={(e) => { e.stopPropagation(); handleDeletePolyline(ftype, i); }}
+                          />
+                        );
+                      })
+                    )}
+                  </>
+                ) : (
+                  /* ── Draw mode: show snap circles + rubber band ── */
+                  <>
+                    {/* Committed drawing path so far */}
+                    {drawingPath.length >= 2 && (
+                      <polyline
+                        points={drawingPath.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}
+                        fill="none" stroke={style.stroke} strokeWidth={style.width}
+                        strokeDasharray={style.dash} strokeLinecap="round"
+                        pointerEvents="none"
+                      />
+                    )}
 
-                {/* Rubber band line */}
-                {drawingPath.length >= 1 && mousePos && (
-                  <line
-                    x1={drawingPath[drawingPath.length - 1][0]}
-                    y1={drawingPath[drawingPath.length - 1][1]}
-                    x2={mousePos.x} y2={mousePos.y}
-                    stroke={style.stroke} strokeWidth={style.width}
-                    strokeDasharray="4,4" opacity={0.5}
-                    pointerEvents="none"
-                  />
-                )}
+                    {/* Rubber band line */}
+                    {drawingPath.length >= 1 && mousePos && (
+                      <line
+                        x1={drawingPath[drawingPath.length - 1][0]}
+                        y1={drawingPath[drawingPath.length - 1][1]}
+                        x2={mousePos.x} y2={mousePos.y}
+                        stroke={style.stroke} strokeWidth={style.width}
+                        strokeDasharray="4,4" opacity={0.5}
+                        pointerEvents="none"
+                      />
+                    )}
 
-                {/* Snap circles */}
-                {snapPoints.map((pt, i) => {
-                  const inPath = drawingPath.some(p => ptKey(p) === ptKey(pt));
-                  const isPending = deletePending && ptKey(deletePending) === ptKey(pt);
-                  const isLast = drawingPath.length > 0 && ptKey(drawingPath[drawingPath.length - 1]) === ptKey(pt);
-                  return (
-                    <circle
-                      key={i}
-                      cx={pt[0]} cy={pt[1]}
-                      r={isPending || isLast ? snapR * 1.5 : snapR}
-                      fill={isPending ? '#C44A20' : isLast ? style.stroke : (deleteMode ? 'rgba(180,60,60,0.5)' : 'rgba(255,255,255,0.65)')}
-                      stroke={isPending || isLast ? style.stroke : 'rgba(0,0,0,0.4)'}
-                      strokeWidth={Math.max(0.8, 1 / transform.scale)}
-                      style={{ cursor: 'crosshair', pointerEvents: 'all' }}
-                      onClick={(e) => { e.stopPropagation(); handleSnapClick(pt); }}
-                    />
-                  );
-                })}
+                    {/* Snap circles */}
+                    {snapPoints.map((pt, i) => {
+                      const isLast = drawingPath.length > 0 && ptKey(drawingPath[drawingPath.length - 1]) === ptKey(pt);
+                      return (
+                        <circle
+                          key={i}
+                          cx={pt[0]} cy={pt[1]}
+                          r={isLast ? snapR * 1.5 : snapR}
+                          fill={isLast ? style.stroke : 'rgba(255,255,255,0.65)'}
+                          stroke={isLast ? style.stroke : 'rgba(0,0,0,0.4)'}
+                          strokeWidth={Math.max(0.8, 1 / transform.scale)}
+                          style={{ cursor: 'crosshair', pointerEvents: 'all' }}
+                          onClick={(e) => { e.stopPropagation(); handleSnapClick(pt); }}
+                        />
+                      );
+                    })}
+                  </>
+                )}
               </>
             );
           })()}
@@ -753,16 +758,16 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
         <div style={styles.featurePanel}>
           <div style={styles.featurePanelTitle}>
             {deleteMode
-              ? (deletePending ? 'Click 2nd point to remove edge' : 'Click a point to start deletion')
+              ? 'Hover a path and click to delete it'
               : drawingPath.length > 0
-                ? `Drawing — click last point again to save, right-click to cancel`
+                ? 'Drawing — click last point again to save'
                 : 'Click a snap point to start drawing'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {FEATURE_TYPES.map(type => {
               const s = FEATURE_STYLES[type];
               return (
-                <button key={type} onClick={() => { setFeatureType(type); setDrawingPath([]); setDeleteMode(false); setDeletePending(null); }}
+                <button key={type} onClick={() => { setFeatureType(type); setDrawingPath([]); setDeleteMode(false); setHoveredFeature(null); }}
                   style={{
                     ...styles.featureTypeBtn,
                     background: featureType === type ? s.stroke : 'transparent',
@@ -775,7 +780,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
             })}
           </div>
           <div style={{ marginTop: 8, borderTop: '1px solid var(--parchment-dark)', paddingTop: 6, fontSize: 9, color: 'var(--ink-faded)', fontFamily: 'var(--font-heading)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Right-click: {drawingPath.length > 0 ? 'cancel path' : deleteMode ? 'exit delete' : 'delete mode'}
+            Right-click: {drawingPath.length > 0 ? 'cancel path' : deleteMode ? 'back to drawing' : 'enter delete mode'}
           </div>
         </div>
       )}
