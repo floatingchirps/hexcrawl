@@ -501,7 +501,7 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
               style={styles.addBtn}
             >
               + Add information
-              <span style={{ fontSize: 10, marginLeft: 4 }}>{addMenuOpen ? '▲' : '▼'}</span>
+              <span style={{ fontSize: 10, marginLeft: 4 }}>{addMenuOpen ? '▼' : '▶'}</span>
             </button>
             {addMenuOpen && (
               <div style={styles.addDropdown}>
@@ -664,7 +664,6 @@ const styles = {
   },
   addWrapper: {
     marginTop: 8,
-    position: 'relative',
   },
   addBtn: {
     width: '100%',
@@ -682,18 +681,11 @@ const styles = {
     alignItems: 'center',
   },
   addDropdown: {
-    position: 'absolute',
-    bottom: '100%',
-    left: 0,
-    right: 0,
     background: 'var(--parchment)',
     border: '1.5px solid var(--ink-faded)',
     borderRadius: 4,
-    boxShadow: '0 -4px 16px rgba(0,0,0,0.2)',
-    marginBottom: 4,
-    maxHeight: 200,
-    overflowY: 'auto',
-    zIndex: 10,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+    marginTop: 4,
   },
   addOption: {
     display: 'flex',
