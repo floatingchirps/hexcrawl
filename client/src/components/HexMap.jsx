@@ -122,12 +122,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
       style={{ cursor: 'pointer' }}
       opacity={opacity}
     >
-      {/* Selection glow */}
-      {isSelected && (
-        <polygon points={corners} fill="none"
-          stroke="rgba(212,160,23,0.35)" strokeWidth={8} />
-      )}
-
       {/* Base fill */}
       <polygon
         points={corners}
@@ -512,6 +506,13 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
               role={role}
             />
           ))}
+
+          {/* Selection glow — above all hex fills/borders, below features */}
+          {selectedHex && (() => {
+            const hex = hexLayout.find(h => h.label === selectedHex);
+            if (!hex) return null;
+            return <polygon points={hexCornerPoints(hex.cx, hex.cy)} fill="none" stroke="rgba(212,160,23,0.35)" strokeWidth={8} />;
+          })()}
 
           {/* Feature layer — rendered after ALL tiles so features always appear on top.
               Ordered by type so roads > borders > trails > walls > rivers (z-order). */}
