@@ -332,9 +332,38 @@ async function resetMap(mapOwner = 'shared') {
   await seedMap(mapOwner, 4);
 }
 
+async function mergePlayerHexToDM(h) {
+  await query(`
+    INSERT INTO hexes (label, map_owner, terrain, poi_type, poi_name, features, dangers, factions, resources, rumors, history_lore, status, notes, npcs, explored, ring)
+    VALUES ($1, 'dm', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    ON CONFLICT (label, map_owner) DO UPDATE SET
+      terrain      = CASE WHEN hexes.terrain IS NULL OR hexes.terrain = '' THEN EXCLUDED.terrain ELSE hexes.terrain END,
+      poi_type     = CASE WHEN hexes.poi_type IS NULL OR hexes.poi_type = '' THEN EXCLUDED.poi_type ELSE hexes.poi_type END,
+      poi_name     = CASE WHEN hexes.poi_name IS NULL OR hexes.poi_name = '' THEN EXCLUDED.poi_name ELSE hexes.poi_name END,
+      features     = CASE WHEN hexes.features IS NULL OR hexes.features = '[]' THEN EXCLUDED.features ELSE hexes.features END,
+      dangers      = CASE WHEN hexes.dangers IS NULL OR hexes.dangers = '[]' THEN EXCLUDED.dangers ELSE hexes.dangers END,
+      factions     = CASE WHEN hexes.factions IS NULL OR hexes.factions = '[]' THEN EXCLUDED.factions ELSE hexes.factions END,
+      resources    = CASE WHEN hexes.resources IS NULL OR hexes.resources = '{"types":[],"notes":""}' THEN EXCLUDED.resources ELSE hexes.resources END,
+      rumors       = CASE WHEN hexes.rumors IS NULL OR hexes.rumors = '[]' THEN EXCLUDED.rumors ELSE hexes.rumors END,
+      history_lore = CASE WHEN hexes.history_lore IS NULL OR hexes.history_lore = '' THEN EXCLUDED.history_lore ELSE hexes.history_lore END,
+      status       = CASE WHEN hexes.status IS NULL OR hexes.status = '' OR hexes.status = 'unknown' THEN EXCLUDED.status ELSE hexes.status END,
+      notes        = CASE WHEN hexes.notes IS NULL OR hexes.notes = '' THEN EXCLUDED.notes ELSE hexes.notes END,
+      npcs         = CASE WHEN hexes.npcs IS NULL OR hexes.npcs = '[]' THEN EXCLUDED.npcs ELSE hexes.npcs END,
+      explored     = GREATEST(hexes.explored, EXCLUDED.explored)
+  `, [
+    h.label,
+    h.terrain || null, h.poi_type || null, h.poi_name || null,
+    h.features || '[]', h.dangers || '[]', h.factions || '[]',
+    h.resources || '{"types":[],"notes":""}', h.rumors || '[]',
+    h.history_lore || '', h.status || 'unknown', h.notes || '',
+    h.npcs || '[]', h.explored || 0, h.ring || 0,
+  ]);
+}
+
 module.exports = {
   initSchema,
   getAllHexes, getHex, updateHex, getHexHistory,
   getMeta, setMeta, addRing, removeOuterRing,
   exportJSON, exportCSV, importJSON, resetMap,
+  mergePlayerHexToDM,
 };

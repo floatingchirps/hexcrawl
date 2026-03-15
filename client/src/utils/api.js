@@ -103,3 +103,10 @@ export async function resetMap(mapOwner) {
     headers: authHeaders(),
   });
 }
+
+export async function copyFromPlayer() {
+  return fetchJSON(`${BASE}/copy-from-player`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+}

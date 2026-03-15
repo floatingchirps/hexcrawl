@@ -178,6 +178,18 @@ app.post('/api/reset', requireDM, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/copy-from-player — DM only: merge all explored player hexes into DM map
+app.post('/api/copy-from-player', requireDM, async (req, res) => {
+  try {
+    const playerHexes = await db.getAllHexes(true, 'shared');
+    const explored = playerHexes.filter(h => h.explored);
+    for (const h of explored) {
+      await db.mergePlayerHexToDM(h);
+    }
+    res.json({ ok: true, count: explored.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Fallback to React app
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));

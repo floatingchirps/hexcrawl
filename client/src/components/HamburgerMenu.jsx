@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { addRing, removeRing, exportJSON, resetMap, updateMeta } from '../utils/api';
+import { addRing, removeRing, exportJSON, resetMap, updateMeta, copyFromPlayer } from '../utils/api';
 
 export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange, onLogout, meta, onMetaChange }) {
   const [open, setOpen] = useState(false);
@@ -7,6 +7,7 @@ export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange,
   const [resetStep, setResetStep] = useState(0); // 0=none, 1=first warning, 2=final warning
   const [editingMapName, setEditingMapName] = useState(false);
   const [mapNameInput, setMapNameInput] = useState('');
+  const [copyingPlayer, setCopyingPlayer] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -42,6 +43,19 @@ export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange,
     setConfirmRemove(null);
     onRingChange();
     setOpen(false);
+  }
+
+  async function handleCopyFromPlayer() {
+    setCopyingPlayer(true);
+    try {
+      const result = await copyFromPlayer();
+      onRingChange();
+      setOpen(false);
+    } catch (err) {
+      console.error('Copy from player failed:', err);
+    } finally {
+      setCopyingPlayer(false);
+    }
   }
 
   async function saveMapName() {
@@ -86,6 +100,9 @@ export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange,
 
           {role === 'dm' && <>
             <div style={styles.section}>Map Settings</div>
+            {viewMode === 'dm' && (
+              <MenuItem icon="⇄" label={copyingPlayer ? 'Copying…' : 'Copy All from Player Map'} onClick={handleCopyFromPlayer} />
+            )}
             {editingMapName ? (
               <div style={{ padding: '4px 12px 8px' }}>
                 <div style={{ display: 'flex', gap: 6 }}>
