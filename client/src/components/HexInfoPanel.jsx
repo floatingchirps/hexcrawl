@@ -223,10 +223,29 @@ function SectionContent({ sectionId, data }) {
   }
 }
 
+const HEX_RESET_DEFAULTS = {
+  terrain: null, poi_type: null, poi_name: null,
+  features: '[]', dangers: '[]', factions: '[]',
+  resources: '{"types":[],"notes":""}', rumors: '[]',
+  history_lore: '', status: 'unknown', notes: '',
+  secrets: '', npcs: '[]', explored: 0,
+};
+
 export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClose, onOpenRadialSection, onUpdate }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  async function handleResetHex() {
+    try {
+      const result = await updateHex(hexLabel, HEX_RESET_DEFAULTS, mapOwner);
+      onUpdate?.(result);
+      setConfirmReset(false);
+    } catch (err) {
+      console.error('Failed to reset hex:', err);
+    }
+  }
 
   async function saveTitle() {
     try {
@@ -340,6 +359,19 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {role === 'dm' && (
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--parchment-dark)', paddingTop: 12 }}>
+            {confirmReset ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={handleResetHex} style={styles.resetConfirmBtn}>Confirm Reset</button>
+                <button onClick={() => setConfirmReset(false)} style={styles.resetCancelBtn}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmReset(true)} style={styles.resetBtn}>Reset Hex</button>
             )}
           </div>
         )}
@@ -483,5 +515,40 @@ const styles = {
     color: 'var(--ink)',
     cursor: 'pointer',
     textAlign: 'left',
+  },
+  resetBtn: {
+    width: '100%',
+    padding: '7px 12px',
+    background: 'none',
+    border: '1px solid var(--danger-red)',
+    borderRadius: 3,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'var(--danger-red)',
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  resetConfirmBtn: {
+    flex: 1,
+    padding: '7px',
+    background: 'var(--danger-red)',
+    border: 'none',
+    borderRadius: 3,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 11,
+    color: 'white',
+    cursor: 'pointer',
+  },
+  resetCancelBtn: {
+    flex: 1,
+    padding: '7px',
+    background: 'var(--parchment-dark)',
+    border: '1px solid var(--ink-faded)',
+    borderRadius: 3,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 11,
+    color: 'var(--ink)',
+    cursor: 'pointer',
   },
 };
