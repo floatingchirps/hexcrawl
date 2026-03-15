@@ -223,6 +223,88 @@ function SectionContent({ sectionId, data }) {
   }
 }
 
+function EventsEditor({
+  data, editingEventId, editEventSession, editEventText,
+  showAddEvent, newEventSession, newEventText,
+  onStartEdit, onCancelEdit, onSaveEdit, onDelete,
+  onShowAdd, onCancelAdd, onAddEvent,
+  setEditEventSession, setEditEventText, setNewEventSession, setNewEventText,
+}) {
+  let events = [];
+  try {
+    const parsed = JSON.parse(data.history_lore || '[]');
+    events = Array.isArray(parsed) ? parsed : [];
+  } catch { events = []; }
+  const sorted = [...events].sort((a, b) => (b.session || 0) - (a.session || 0));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {sorted.map(ev => (
+        <div key={ev.id}>
+          {editingEventId === ev.id ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <input
+                value={editEventSession}
+                onChange={e => setEditEventSession(e.target.value)}
+                placeholder="Session #"
+                type="number"
+                style={{ width: 100, padding: '3px 7px', fontSize: 12, border: '1px solid var(--gold)', borderRadius: 3, background: 'var(--parchment-light)', fontFamily: 'var(--font-body)' }}
+              />
+              <textarea
+                value={editEventText}
+                onChange={e => setEditEventText(e.target.value)}
+                style={{ fontSize: 13, padding: '5px 7px', border: '1px solid var(--gold)', borderRadius: 3, background: 'var(--parchment-light)', fontFamily: 'var(--font-body)', resize: 'vertical', minHeight: 60 }}
+              />
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button onClick={onSaveEdit} style={{ flex: 1, padding: '5px', background: 'var(--gold-dark)', color: 'white', border: 'none', borderRadius: 3, fontFamily: 'var(--font-heading)', fontSize: 11, cursor: 'pointer' }}>Save</button>
+                <button onClick={onCancelEdit} style={{ flex: 1, padding: '5px', background: 'var(--parchment-dark)', border: '1px solid var(--ink-faded)', borderRadius: 3, fontFamily: 'var(--font-heading)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-heading)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold-dark)' }}>
+                  Session {ev.session || '?'}
+                </span>
+                <p style={{ fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>{ev.text}</p>
+              </div>
+              <div style={{ display: 'flex', gap: 3, flexShrink: 0, marginTop: 1 }}>
+                <button onClick={() => onStartEdit(ev)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-faded)', fontSize: 12, padding: '1px 3px' }} title="Edit">✎</button>
+                <button onClick={() => onDelete(ev.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red)', fontSize: 12, padding: '1px 3px' }} title="Delete">✕</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      {showAddEvent ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 4, padding: '8px', background: 'var(--parchment-light)', borderRadius: 3, border: '1px solid var(--parchment-dark)' }}>
+          <input
+            value={newEventSession}
+            onChange={e => setNewEventSession(e.target.value)}
+            placeholder="Session #"
+            type="number"
+            style={{ width: 100, padding: '3px 7px', fontSize: 12, border: '1px solid var(--ink-faded)', borderRadius: 3, background: 'white', fontFamily: 'var(--font-body)' }}
+          />
+          <textarea
+            value={newEventText}
+            onChange={e => setNewEventText(e.target.value)}
+            placeholder="What happened?"
+            style={{ fontSize: 13, padding: '5px 7px', border: '1px solid var(--ink-faded)', borderRadius: 3, background: 'white', fontFamily: 'var(--font-body)', resize: 'vertical', minHeight: 60 }}
+          />
+          <div style={{ display: 'flex', gap: 5 }}>
+            <button onClick={onAddEvent} style={{ flex: 1, padding: '5px', background: 'var(--gold-dark)', color: 'white', border: 'none', borderRadius: 3, fontFamily: 'var(--font-heading)', fontSize: 11, cursor: 'pointer' }}>Add Event</button>
+            <button onClick={onCancelAdd} style={{ flex: 1, padding: '5px', background: 'var(--parchment-dark)', border: '1px solid var(--ink-faded)', borderRadius: 3, fontFamily: 'var(--font-heading)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={onShowAdd} style={{ width: '100%', padding: '6px', background: 'none', border: '1px dashed var(--ink-faded)', borderRadius: 3, fontFamily: 'var(--font-heading)', fontSize: 10, letterSpacing: '0.08em', color: 'var(--ink-light)', cursor: 'pointer', marginTop: 2 }}>
+          + Add Event
+        </button>
+      )}
+    </div>
+  );
+}
+
 const HEX_RESET_DEFAULTS = {
   terrain: null, poi_type: null, poi_name: null,
   features: '[]', dangers: '[]', factions: '[]',
@@ -236,6 +318,60 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+  // Events inline editing
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [editEventSession, setEditEventSession] = useState('');
+  const [editEventText, setEditEventText] = useState('');
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [newEventSession, setNewEventSession] = useState('');
+  const [newEventText, setNewEventText] = useState('');
+
+  function parseEvents(data) {
+    if (!data?.history_lore) return [];
+    try {
+      const parsed = JSON.parse(data.history_lore);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  async function saveEvents(events) {
+    try {
+      const result = await updateHex(hexLabel, { history_lore: JSON.stringify(events), explored: 1 }, mapOwner);
+      onUpdate?.(result);
+    } catch (err) { console.error('Failed to save events:', err); }
+  }
+
+  function startEditEvent(ev) {
+    setEditingEventId(ev.id);
+    setEditEventSession(ev.session != null ? String(ev.session) : '');
+    setEditEventText(ev.text || '');
+  }
+
+  async function saveEditedEvent() {
+    const events = parseEvents(data);
+    const updated = events.map(ev =>
+      ev.id === editingEventId
+        ? { ...ev, session: parseInt(editEventSession) || 0, text: editEventText.trim() }
+        : ev
+    );
+    await saveEvents(updated);
+    setEditingEventId(null);
+  }
+
+  async function deleteEvent(id) {
+    const events = parseEvents(data);
+    await saveEvents(events.filter(ev => ev.id !== id));
+  }
+
+  async function addEvent() {
+    if (!newEventText.trim()) return;
+    const events = parseEvents(data);
+    const updated = [...events, { id: Date.now(), session: parseInt(newEventSession) || 0, text: newEventText.trim() }];
+    await saveEvents(updated);
+    setNewEventText('');
+    setNewEventSession('');
+    setShowAddEvent(false);
+  }
 
   async function handleResetHex() {
     try {
@@ -324,14 +460,35 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
             <div style={styles.sectionHeader}>
               <span style={styles.sectionIcon}>{section.icon}</span>
               <span style={styles.sectionLabel}>{section.label}</span>
-              <button
-                onClick={() => onOpenRadialSection(section.id)}
-                style={styles.editBtn}
-                title={`Edit ${section.label}`}
-              >✎</button>
+              {section.id !== 'history' && (
+                <button onClick={() => onOpenRadialSection(section.id)} style={styles.editBtn} title={`Edit ${section.label}`}>✎</button>
+              )}
             </div>
             <div style={styles.sectionContent}>
-              <SectionContent sectionId={section.id} data={data} />
+              {section.id === 'history' ? (
+                <EventsEditor
+                  data={data}
+                  editingEventId={editingEventId}
+                  editEventSession={editEventSession}
+                  editEventText={editEventText}
+                  showAddEvent={showAddEvent}
+                  newEventSession={newEventSession}
+                  newEventText={newEventText}
+                  onStartEdit={startEditEvent}
+                  onCancelEdit={() => setEditingEventId(null)}
+                  onSaveEdit={saveEditedEvent}
+                  onDelete={deleteEvent}
+                  onShowAdd={() => setShowAddEvent(true)}
+                  onCancelAdd={() => { setShowAddEvent(false); setNewEventText(''); setNewEventSession(''); }}
+                  onAddEvent={addEvent}
+                  setEditEventSession={setEditEventSession}
+                  setEditEventText={setEditEventText}
+                  setNewEventSession={setNewEventSession}
+                  setNewEventText={setNewEventText}
+                />
+              ) : (
+                <SectionContent sectionId={section.id} data={data} />
+              )}
             </div>
           </div>
         ))}
@@ -351,7 +508,11 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
                 {emptySections.map(s => (
                   <button
                     key={s.id}
-                    onClick={() => { onOpenRadialSection(s.id); setAddMenuOpen(false); }}
+                    onClick={() => {
+                      if (s.id === 'history') { setShowAddEvent(true); }
+                      else { onOpenRadialSection(s.id); }
+                      setAddMenuOpen(false);
+                    }}
                     style={styles.addOption}
                   >
                     <span style={{ marginRight: 8 }}>{s.icon}</span>
@@ -360,6 +521,38 @@ export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClos
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Inline add-event form when history not yet populated */}
+        {showAddEvent && !filledSections.find(s => s.id === 'history') && (
+          <div style={{ ...styles.section }}>
+            <div style={styles.sectionHeader}>
+              <span style={styles.sectionIcon}>📜</span>
+              <span style={styles.sectionLabel}>Events</span>
+            </div>
+            <div style={styles.sectionContent}>
+              <EventsEditor
+                data={data}
+                editingEventId={null}
+                editEventSession={editEventSession}
+                editEventText={editEventText}
+                showAddEvent={showAddEvent}
+                newEventSession={newEventSession}
+                newEventText={newEventText}
+                onStartEdit={startEditEvent}
+                onCancelEdit={() => setEditingEventId(null)}
+                onSaveEdit={saveEditedEvent}
+                onDelete={deleteEvent}
+                onShowAdd={() => setShowAddEvent(true)}
+                onCancelAdd={() => { setShowAddEvent(false); setNewEventText(''); setNewEventSession(''); }}
+                onAddEvent={addEvent}
+                setEditEventSession={setEditEventSession}
+                setEditEventText={setEditEventText}
+                setNewEventSession={setNewEventSession}
+                setNewEventText={setNewEventText}
+              />
+            </div>
           </div>
         )}
 
