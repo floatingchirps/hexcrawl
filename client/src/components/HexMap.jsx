@@ -4,7 +4,7 @@ import POIIcon from './POIIcons';
 
 const SIZE = HEX_SIZE;
 
-// ─── Module-level feature rendering (z-ordered layer outside HexTile) ───────
+// ─── Global feature styles ────────────────────────────────────────────────────
 const FEATURE_STYLES = {
   road:   { stroke: '#A0897A', width: 4 },
   river:  { stroke: '#7AACCF', width: 4 },
@@ -12,7 +12,10 @@ const FEATURE_STYLES = {
   border: { stroke: '#6B3A8B', width: 2.5, dash: '8,3' },
   wall:   { stroke: '#3D2B1F', width: 5 },
 };
+const FEATURE_TYPES = ['river', 'road', 'trail', 'wall', 'border'];
 const FEATURE_Z_ORDER = ['river', 'wall', 'trail', 'border', 'road'];
+
+function ptKey(p) { return `${Math.round(p[0])},${Math.round(p[1])}`; }
 
 function hexCorners6(cx, cy) {
   return Array.from({ length: 6 }, (_, i) => [
@@ -20,6 +23,8 @@ function hexCorners6(cx, cy) {
     cy + SIZE * Math.sin((Math.PI / 180) * 60 * i),
   ]);
 }
+
+const SNAP_DIST = 18; // world-space pixel threshold for snapping
 
 function wrapLabel(text) {
   if (!text) return [text];
@@ -36,24 +41,6 @@ function wrapLabel(text) {
   return [words.slice(0, best).join(' '), words.slice(best).join(' ')];
 }
 
-function renderFeaturePath(f, key, corners6, cx, cy, edgeMids) {
-  try {
-    const style = FEATURE_STYLES[f.type] || { stroke: '#888', width: 2 };
-    if (f.from != null && f.to != null) {
-      const from = Math.round(Number(f.from)), to = Math.round(Number(f.to));
-      if (from < 0 || from > 5 || to < 0 || to > 5 || !isFinite(from) || !isFinite(to)) return null;
-      const [x1, y1] = corners6[from], [x2, y2] = corners6[to];
-      const d = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
-      return <path key={key} d={d} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} fill="none" strokeLinecap="round" />;
-    }
-    const edges = f.edges || [];
-    if (edges.length < 2) return null;
-    const pts = edges.map(e => edgeMids[e]);
-    if (pts.some(p => !p)) return null;
-    const d = pts.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-    return <path key={key} d={d} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} fill="none" strokeLinecap="round" />;
-  } catch { return null; }
-}
 
 // ─── HexTile ─────────────────────────────────────────────────────────────────
 function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onContextMenu, onLongPress, onHover, onHoverEnd, role }) {
@@ -194,7 +181,7 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
   );
 }
 
-export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile, centerTrigger, onHexSelect, onHexDeselect, onHexContextMenu }) {
+export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile, centerTrigger, onHexSelect, onHexDeselect, onHexContextMenu, mapFeatures, onSaveMapFeatures }) {
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -207,12 +194,39 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   const touchStartRef = useRef(null);
   const lastTouchDist = useRef(null);
 
+  // ─── Feature drawing state ────────────────────────────────────────────────
+  const [featureDrawMode, setFeatureDrawMode] = useState(false);
+  const [featureType, setFeatureType] = useState('river');
+  const [drawingPath, setDrawingPath] = useState([]);
+  const [mousePos, setMousePos] = useState(null);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deletePending, setDeletePending] = useState(null);
+  // Ref for non-passive touch handler so we can disable pan in feature mode
+  const featureDrawModeRef = useRef(false);
+  useEffect(() => { featureDrawModeRef.current = featureDrawMode; }, [featureDrawMode]);
+
   const hexLayout = useMemo(() => buildFullLayout(ringCount, SIZE), [ringCount]);
   const hexMap = useMemo(() => {
     const m = {};
     hexData.forEach(h => m[h.label] = h);
     return m;
   }, [hexData]);
+
+  // All snap points: hex corners (deduplicated) + hex centers
+  const snapPoints = useMemo(() => {
+    const snapMap = new Map();
+    for (const hex of hexLayout) {
+      for (let i = 0; i < 6; i++) {
+        const x = hex.cx + SIZE * Math.cos((Math.PI / 180) * 60 * i);
+        const y = hex.cy + SIZE * Math.sin((Math.PI / 180) * 60 * i);
+        const key = `${Math.round(x)},${Math.round(y)}`;
+        if (!snapMap.has(key)) snapMap.set(key, [x, y]);
+      }
+      const ck = `${Math.round(hex.cx)},${Math.round(hex.cy)}`;
+      if (!snapMap.has(ck)) snapMap.set(ck, [hex.cx, hex.cy]);
+    }
+    return Array.from(snapMap.values());
+  }, [hexLayout]);
 
   // Compute opacity for each hex based on distance to nearest hex with terrain
   const fadeMap = useMemo(() => {
@@ -338,8 +352,88 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
     }));
   }, [selectedHex, isMobile, centerTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Feature draw helpers ─────────────────────────────────────────────────
+  function svgCoord(clientX, clientY) {
+    const rect = svgRef.current.getBoundingClientRect();
+    return [
+      (clientX - rect.left - transform.x) / transform.scale,
+      (clientY - rect.top - transform.y) / transform.scale,
+    ];
+  }
+
+  function findNearestSnap(wx, wy) {
+    let best = null, bestDist = SNAP_DIST;
+    for (const pt of snapPoints) {
+      const d = Math.hypot(wx - pt[0], wy - pt[1]);
+      if (d < bestDist) { bestDist = d; best = pt; }
+    }
+    return best;
+  }
+
+  function commitDrawingPath(path) {
+    if (path.length < 2) return;
+    const updated = {
+      ...(mapFeatures || {}),
+      [featureType]: [...((mapFeatures || {})[featureType] || []), path],
+    };
+    onSaveMapFeatures(updated);
+    setDrawingPath([]);
+  }
+
+  function handleDeleteEdge(p1, p2) {
+    const k1 = ptKey(p1), k2 = ptKey(p2);
+    const polylines = ((mapFeatures || {})[featureType] || []);
+    const newPolylines = [];
+    for (const poly of polylines) {
+      let splitIdx = -1;
+      for (let i = 0; i < poly.length - 1; i++) {
+        const ak = ptKey(poly[i]), bk = ptKey(poly[i + 1]);
+        if ((ak === k1 && bk === k2) || (ak === k2 && bk === k1)) { splitIdx = i; break; }
+      }
+      if (splitIdx === -1) {
+        newPolylines.push(poly);
+      } else {
+        const before = poly.slice(0, splitIdx + 1);
+        const after = poly.slice(splitIdx + 1);
+        if (before.length >= 2) newPolylines.push(before);
+        if (after.length >= 2) newPolylines.push(after);
+      }
+    }
+    onSaveMapFeatures({ ...(mapFeatures || {}), [featureType]: newPolylines });
+  }
+
+  function handleSnapClick(pt) {
+    if (deleteMode) {
+      if (!deletePending) {
+        setDeletePending(pt);
+      } else {
+        handleDeleteEdge(deletePending, pt);
+        setDeletePending(null);
+      }
+      return;
+    }
+    // If clicking last added point again with 2+ points — commit
+    if (drawingPath.length >= 2 && ptKey(drawingPath[drawingPath.length - 1]) === ptKey(pt)) {
+      commitDrawingPath(drawingPath);
+      return;
+    }
+    setDrawingPath(prev => [...prev, pt]);
+  }
+
+  function toggleFeatureMode() {
+    if (featureDrawMode) {
+      // Exiting: discard any in-progress path
+      setDrawingPath([]);
+      setDeleteMode(false);
+      setDeletePending(null);
+      setMousePos(null);
+    }
+    setFeatureDrawMode(v => !v);
+  }
+
   // Pan: right-click drag (button 2) or middle-click drag (button 1)
   function handleMouseDown(e) {
+    if (featureDrawMode) return; // block pan while drawing
     if (e.button === 2 || e.button === 1) {
       e.preventDefault();
       setDragging(true);
@@ -350,6 +444,10 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   }
 
   function handleMouseMove(e) {
+    if (featureDrawMode && svgRef.current) {
+      const [wx, wy] = svgCoord(e.clientX, e.clientY);
+      setMousePos({ x: wx, y: wy });
+    }
     if (!dragging || !dragStart) return;
     setDidDrag(true);
     setTransform(t => ({ ...t, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
@@ -366,6 +464,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   // Prevent native context menu on the SVG (we handle right-click ourselves)
   function handleContextMenu(e) {
     e.preventDefault();
+    if (featureDrawMode) handleFeatureRightClick();
   }
 
   function handleWheel(e) {
@@ -388,6 +487,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
 
   // Touch: single finger pan, two finger pinch-zoom
   function handleTouchStart(e) {
+    if (featureDrawMode) return; // block pan in feature draw mode
     if (e.touches.length === 1) {
       const t = e.touches[0];
       touchStartRef.current = { x: t.clientX, y: t.clientY, tx: transform.x, ty: transform.y };
@@ -403,6 +503,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   useEffect(() => {
     function handleTouchMove(e) {
       e.preventDefault();
+      if (featureDrawModeRef.current) return; // block pan in feature draw mode
       if (e.touches.length === 1 && touchStartRef.current) {
         const t = e.touches[0];
         // Capture ref values immediately — the functional updater runs async so
@@ -446,8 +547,20 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
     lastTouchDist.current = null;
   }
 
-  // Left-click on empty space deselects
+  // Left-click on empty space: deselect (normal) or check snap (feature mode)
   function handleSvgClick(e) {
+    if (featureDrawMode) {
+      // Snap clicks are handled by circle onClick; clicking empty space exits delete mode
+      if (deleteMode && (e.target === svgRef.current || e.target.tagName === 'svg' || e.target.tagName === 'g' || e.target.tagName === 'rect')) {
+        const [wx, wy] = svgCoord(e.clientX, e.clientY);
+        const snap = findNearestSnap(wx, wy);
+        if (!snap) {
+          setDeleteMode(false);
+          setDeletePending(null);
+        }
+      }
+      return;
+    }
     // Deselect if click lands on the SVG itself or the <g> transform group (empty map space)
     // Hex tiles call stopPropagation so their clicks don't reach here
     if (e.target === svgRef.current || e.target.tagName === 'svg' || e.target.tagName === 'g') {
@@ -455,7 +568,23 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
     }
   }
 
+  function handleFeatureRightClick() {
+    if (drawingPath.length > 0) {
+      setDrawingPath([]);
+    } else if (deleteMode) {
+      setDeleteMode(false);
+      setDeletePending(null);
+    } else {
+      setDeleteMode(true);
+      setDeletePending(null);
+    }
+  }
+
   function handleHexContextMenuWithScreenPos(label, cx, cy) {
+    if (featureDrawMode) {
+      handleFeatureRightClick();
+      return;
+    }
     const rect = svgRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const screenX = cx * transform.scale + transform.x + rect.left;
     const screenY = cy * transform.scale + transform.y + rect.top;
@@ -514,27 +643,82 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
             return <polygon points={hexCornerPoints(hex.cx, hex.cy)} fill="none" stroke="rgba(212,160,23,0.35)" strokeWidth={8} />;
           })()}
 
-          {/* Feature layer — rendered after ALL tiles so features always appear on top.
-              Ordered by type so roads > borders > trails > walls > rivers (z-order). */}
+          {/* Global feature layer — polylines stored in mapFeatures */}
           {FEATURE_Z_ORDER.map(type =>
-            hexLayout.flatMap(hex => {
-              const data = hexMap[hex.label];
-              if (!data?.explored) return [];
-              let features;
-              try { features = JSON.parse(data.features || '[]'); } catch { return []; }
-              if (!Array.isArray(features)) return [];
-              return features
-                .filter(f => f.type === type)
-                .map((f, i) => renderFeaturePath(
-                  f,
-                  `${hex.label}-${type}-${i}`,
-                  hexCorners6(hex.cx, hex.cy),
-                  hex.cx, hex.cy,
-                  hexEdgeMidpoints(hex.cx, hex.cy, SIZE)
-                ))
-                .filter(Boolean);
+            ((mapFeatures || {})[type] || []).map((polyline, i) => {
+              const style = FEATURE_STYLES[type];
+              const pts = polyline.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+              return (
+                <polyline
+                  key={`${type}-${i}`}
+                  points={pts}
+                  fill="none"
+                  stroke={featureDrawMode && featureType !== type ? style.stroke : style.stroke}
+                  strokeWidth={style.width}
+                  strokeDasharray={style.dash}
+                  strokeLinecap="round"
+                  opacity={featureDrawMode && featureType !== type ? 0.2 : 1}
+                  pointerEvents="none"
+                />
+              );
             })
           )}
+
+          {/* Feature draw mode overlay */}
+          {featureDrawMode && (() => {
+            const style = FEATURE_STYLES[featureType] || { stroke: '#888', width: 2 };
+            const snapR = Math.max(4, 5 / transform.scale);
+            return (
+              <>
+                {/* Dark overlay */}
+                <rect x="-99999" y="-99999" width="199998" height="199998"
+                  fill="rgba(0,0,0,0.45)" pointerEvents="all"
+                  onClick={(e) => { e.stopPropagation(); }}
+                />
+
+                {/* Committed drawing path so far */}
+                {drawingPath.length >= 2 && (
+                  <polyline
+                    points={drawingPath.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}
+                    fill="none" stroke={style.stroke} strokeWidth={style.width}
+                    strokeDasharray={style.dash} strokeLinecap="round"
+                    pointerEvents="none"
+                  />
+                )}
+
+                {/* Rubber band line */}
+                {drawingPath.length >= 1 && mousePos && (
+                  <line
+                    x1={drawingPath[drawingPath.length - 1][0]}
+                    y1={drawingPath[drawingPath.length - 1][1]}
+                    x2={mousePos.x} y2={mousePos.y}
+                    stroke={style.stroke} strokeWidth={style.width}
+                    strokeDasharray="4,4" opacity={0.5}
+                    pointerEvents="none"
+                  />
+                )}
+
+                {/* Snap circles */}
+                {snapPoints.map((pt, i) => {
+                  const inPath = drawingPath.some(p => ptKey(p) === ptKey(pt));
+                  const isPending = deletePending && ptKey(deletePending) === ptKey(pt);
+                  const isLast = drawingPath.length > 0 && ptKey(drawingPath[drawingPath.length - 1]) === ptKey(pt);
+                  return (
+                    <circle
+                      key={i}
+                      cx={pt[0]} cy={pt[1]}
+                      r={isPending || isLast ? snapR * 1.5 : snapR}
+                      fill={isPending ? '#C44A20' : isLast ? style.stroke : (deleteMode ? 'rgba(180,60,60,0.5)' : 'rgba(255,255,255,0.65)')}
+                      stroke={isPending || isLast ? style.stroke : 'rgba(0,0,0,0.4)'}
+                      strokeWidth={Math.max(0.8, 1 / transform.scale)}
+                      style={{ cursor: 'crosshair', pointerEvents: 'all' }}
+                      onClick={(e) => { e.stopPropagation(); handleSnapClick(pt); }}
+                    />
+                  );
+                })}
+              </>
+            );
+          })()}
         </g>
       </svg>
 
@@ -543,8 +727,61 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
         ⊞
       </button>
 
+      {/* Feature draw button (DM only) */}
+      {role === 'dm' && (
+        <button
+          onClick={toggleFeatureMode}
+          style={{
+            ...styles.fitBtn,
+            right: 68,
+            background: featureDrawMode ? 'var(--ink)' : 'var(--parchment)',
+            color: featureDrawMode ? 'var(--gold)' : 'var(--ink)',
+            borderColor: featureDrawMode ? 'var(--gold)' : 'var(--ink-faded)',
+          }}
+          title={featureDrawMode ? 'Exit feature drawing' : 'Draw map features'}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ display: 'block' }}>
+            <path d="M2,5 Q5,2 9,5 Q13,8 16,5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            <path d="M2,9 Q5,6 9,9 Q13,12 16,9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            <path d="M2,13 Q5,10 9,13 Q13,16 16,13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+          </svg>
+        </button>
+      )}
+
+      {/* Feature type picker & status — shown when in draw mode */}
+      {featureDrawMode && (
+        <div style={styles.featurePanel}>
+          <div style={styles.featurePanelTitle}>
+            {deleteMode
+              ? (deletePending ? 'Click 2nd point to remove edge' : 'Click a point to start deletion')
+              : drawingPath.length > 0
+                ? `Drawing — click last point again to save, right-click to cancel`
+                : 'Click a snap point to start drawing'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {FEATURE_TYPES.map(type => {
+              const s = FEATURE_STYLES[type];
+              return (
+                <button key={type} onClick={() => { setFeatureType(type); setDrawingPath([]); setDeleteMode(false); setDeletePending(null); }}
+                  style={{
+                    ...styles.featureTypeBtn,
+                    background: featureType === type ? s.stroke : 'transparent',
+                    color: featureType === type ? '#fff' : 'var(--ink)',
+                    borderColor: featureType === type ? s.stroke : 'transparent',
+                  }}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 8, borderTop: '1px solid var(--parchment-dark)', paddingTop: 6, fontSize: 9, color: 'var(--ink-faded)', fontFamily: 'var(--font-heading)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Right-click: {drawingPath.length > 0 ? 'cancel path' : deleteMode ? 'exit delete' : 'delete mode'}
+          </div>
+        </div>
+      )}
+
       {/* Tooltip */}
-      {tooltip && (
+      {tooltip && !featureDrawMode && (
         <div style={styles.tooltip}>{tooltip.text}</div>
       )}
     </div>
@@ -575,5 +812,31 @@ const styles = {
     pointerEvents: 'none',
     maxWidth: 220,
     boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+  },
+  featurePanel: {
+    position: 'absolute', bottom: 68, right: 20,
+    background: 'var(--parchment)',
+    border: '1.5px solid var(--ink-faded)',
+    borderRadius: 4, padding: '10px 10px 8px',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+    zIndex: 10,
+    minWidth: 140,
+  },
+  featurePanelTitle: {
+    fontSize: 10,
+    fontFamily: 'var(--font-body)',
+    color: 'var(--ink-light)',
+    marginBottom: 8,
+    lineHeight: 1.4,
+    maxWidth: 160,
+  },
+  featureTypeBtn: {
+    display: 'block', width: '100%',
+    padding: '4px 8px',
+    border: '1.5px solid transparent',
+    borderRadius: 3, cursor: 'pointer',
+    fontSize: 12, fontFamily: 'var(--font-body)',
+    textAlign: 'left',
+    textTransform: 'capitalize',
   },
 };

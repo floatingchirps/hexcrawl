@@ -178,6 +178,24 @@ app.post('/api/reset', requireDM, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/features
+app.get('/api/features', requireAuth, async (req, res) => {
+  try {
+    const mapOwner = getMapOwner(req);
+    if (mapOwner === 'dm' && req.role !== 'dm') return res.status(403).json({ error: 'DM only' });
+    res.json(await db.getMapFeatures(mapOwner));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/features (DM only)
+app.put('/api/features', requireDM, async (req, res) => {
+  try {
+    const mapOwner = getMapOwner(req);
+    await db.saveMapFeatures(req.body, mapOwner);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/copy-from-player — DM only: merge all explored player hexes into DM map
 app.post('/api/copy-from-player', requireDM, async (req, res) => {
   try {

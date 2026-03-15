@@ -89,12 +89,14 @@ async function initSchema() {
   await query(`INSERT INTO map_meta (key, value) VALUES ('onboarding_complete', '0') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('map_name', 'Untitled Campaign') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('last_updated', '') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('map_features', '{}') ON CONFLICT (key) DO NOTHING`);
 
   // Defaults for DM map
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_current_ring_count', '4') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_onboarding_complete', '1') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_map_name', 'DM Map') ON CONFLICT (key) DO NOTHING`);
   await query(`INSERT INTO map_meta (key, value) VALUES ('dm_last_updated', '') ON CONFLICT (key) DO NOTHING`);
+  await query(`INSERT INTO map_meta (key, value) VALUES ('dm_map_features', '{}') ON CONFLICT (key) DO NOTHING`);
 
   // Seed shared map if empty
   const sharedCount = await queryOne(`SELECT COUNT(*) as c FROM hexes WHERE map_owner = 'shared'`);
@@ -360,10 +362,25 @@ async function mergePlayerHexToDM(h) {
   ]);
 }
 
+async function getMapFeatures(mapOwner = 'shared') {
+  const key = mapOwner === 'dm' ? 'dm_map_features' : 'map_features';
+  const row = await queryOne('SELECT value FROM map_meta WHERE key = $1', [key]);
+  try { return row ? JSON.parse(row.value) : {}; } catch { return {}; }
+}
+
+async function saveMapFeatures(features, mapOwner = 'shared') {
+  const key = mapOwner === 'dm' ? 'dm_map_features' : 'map_features';
+  await query(
+    `INSERT INTO map_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
+    [key, JSON.stringify(features)]
+  );
+}
+
 module.exports = {
   initSchema,
   getAllHexes, getHex, updateHex, getHexHistory,
   getMeta, setMeta, addRing, removeOuterRing,
   exportJSON, exportCSV, importJSON, resetMap,
   mergePlayerHexToDM,
+  getMapFeatures, saveMapFeatures,
 };

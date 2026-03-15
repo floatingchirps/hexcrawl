@@ -5,7 +5,6 @@ import POIIcon from './POIIcons';
 const SEGMENTS = [
   { id: 'terrain', label: 'Terrain', icon: '⬡', color: '#7A9E5F' },
   { id: 'poi', label: 'POI', icon: '⚑', color: '#D4A017' },
-  { id: 'features', label: 'Features', icon: '~', color: '#7AACCF' },
   { id: 'dangers', label: 'Dangers', icon: '⚠', color: '#8B2020' },
   { id: 'factions', label: 'Orgs', icon: '⚔', color: '#8B6914' },
   { id: 'resources', label: 'Resources', icon: '◈', color: '#4A6B3A' },

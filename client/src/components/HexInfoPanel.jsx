@@ -7,7 +7,6 @@ import { updateHex } from '../utils/api';
 const ALL_SECTIONS = [
   { id: 'terrain', label: 'Terrain', icon: '⬡' },
   { id: 'poi', label: 'Point of Interest', icon: '⚑' },
-  { id: 'features', label: 'Features', icon: '~' },
   { id: 'status', label: 'Status', icon: '◉' },
   { id: 'dangers', label: 'Dangers', icon: '⚠' },
   { id: 'factions', label: 'Organizations', icon: '⚔' },
@@ -19,8 +18,6 @@ const ALL_SECTIONS = [
   { id: 'secrets', label: 'Secrets', icon: '🔒' },
 ];
 
-const FEATURE_TYPE_LABELS = { road: 'Road', river: 'River', trail: 'Trail', wall: 'Wall' };
-const EDGE_LABELS = ['Right', 'Bottom-Right', 'Bottom-Left', 'Left', 'Top-Left', 'Top-Right'];
 
 function parseJSON(val, fallback) {
   try { return JSON.parse(val || JSON.stringify(fallback)); } catch { return fallback; }
@@ -31,10 +28,6 @@ function hasData(data, sectionId) {
   switch (sectionId) {
     case 'terrain': return !!data.terrain;
     case 'poi': return !!data.poi_type;
-    case 'features': {
-      const f = parseJSON(data.features, []);
-      return f.length > 0;
-    }
     case 'status': return data.status && data.status !== 'unknown';
     case 'dangers': {
       const d = parseJSON(data.dangers, []);
@@ -86,21 +79,6 @@ function SectionContent({ sectionId, data }) {
             <span style={{ fontSize: 14 }}>{data.poi_type}</span>
             {data.poi_name && <span style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--ink-light)', marginLeft: 6 }}>— {data.poi_name}</span>}
           </div>
-        </div>
-      );
-    }
-    case 'features': {
-      const features = parseJSON(data.features, []);
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {features.map((f, i) => (
-            <div key={i} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{FEATURE_TYPE_LABELS[f.type] || f.type}</span>
-              <span style={{ color: 'var(--ink-light)', fontSize: 12 }}>
-                ({(f.edges || []).map(e => EDGE_LABELS[e]).join(', ')})
-              </span>
-            </div>
-          ))}
         </div>
       );
     }

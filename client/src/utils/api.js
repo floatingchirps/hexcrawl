@@ -104,6 +104,18 @@ export async function resetMap(mapOwner) {
   });
 }
 
+export async function fetchMapFeatures(mapOwner) {
+  return fetchJSON(`${BASE}/features${mapParam(mapOwner)}`, { headers: authHeaders() });
+}
+
+export async function saveMapFeatures(features, mapOwner) {
+  return fetchJSON(`${BASE}/features${mapParam(mapOwner)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(features),
+  });
+}
+
 export async function copyFromPlayer() {
   return fetchJSON(`${BASE}/copy-from-player`, {
     method: 'POST',

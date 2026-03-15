@@ -6,7 +6,7 @@ import RadialMenu from './components/RadialMenu';
 import HexEditPanel from './components/HexEditPanel';
 import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
-import { getStoredRole, logout, fetchHexes, fetchMeta, fetchHex, updateHex } from './utils/api';
+import { getStoredRole, logout, fetchHexes, fetchMeta, fetchHex, updateHex, fetchMapFeatures, saveMapFeatures as apiSaveMapFeatures } from './utils/api';
 
 const TITLEBAR_HEIGHT = 48;
 
@@ -15,6 +15,7 @@ export default function App() {
   const [hexData, setHexData] = useState([]);
   const [meta, setMeta] = useState({});
   const [loading, setLoading] = useState(true);
+  const [mapFeatures, setMapFeatures] = useState({});
 
   // DM view mode: 'shared' = player map, 'dm' = DM-only map
   const [viewMode, setViewMode] = useState('shared');
@@ -63,9 +64,10 @@ export default function App() {
     setLoading(true);
     try {
       const mapOwner = role === 'dm' ? viewMode : 'shared';
-      const [hexes, m] = await Promise.all([fetchHexes(mapOwner), fetchMeta(mapOwner)]);
+      const [hexes, m, features] = await Promise.all([fetchHexes(mapOwner), fetchMeta(mapOwner), fetchMapFeatures(mapOwner)]);
       setHexData(hexes);
       setMeta(m);
+      setMapFeatures(features || {});
       lastSeenTimestamp.current = m.last_updated ?? null;
     } catch (err) {
       console.error(err);
@@ -99,6 +101,7 @@ export default function App() {
     setRole(null);
     setHexData([]);
     setMeta({});
+    setMapFeatures({});
     setSelectedHex(null);
     setSidebarOpen(true);
     setRadialMenu(null);
@@ -245,6 +248,15 @@ export default function App() {
   }
 
   function handlePanelClose() { setEditPanel(null); }
+  async function handleSaveMapFeatures(features) {
+    setMapFeatures(features);
+    try {
+      await apiSaveMapFeatures(features, currentMap);
+    } catch (err) {
+      console.error('Failed to save features:', err);
+    }
+  }
+
   function handleRingChange() { loadAll(); }
 
   // Toggle DM view
@@ -434,6 +446,8 @@ export default function App() {
           onHexSelect={handleHexSelect}
           onHexDeselect={handleHexDeselect}
           onHexContextMenu={handleHexContextMenu}
+          mapFeatures={mapFeatures}
+          onSaveMapFeatures={handleSaveMapFeatures}
         />
       </div>
 
