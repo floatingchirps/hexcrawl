@@ -174,21 +174,29 @@ export function hexEdgeMidpoints(cx, cy, size = HEX_SIZE) {
 }
 
 export const TERRAIN_COLORS = {
+  // Active terrain types
   plains: '#D4E6A5',
   forest: '#7A9E5F',
-  'dense forest': '#4A6B3A',
+  farmland: '#B8D87A',
   hills: '#C4A876',
   mountains: '#9A9088',
-  swamp: '#7A8A5A',
   desert: '#D4B878',
+  marshes: '#7A8A5A',
+  jungle: '#3A6B3A',
+  tundra: '#D0D8DC',
+  water: '#7AACCF',
+  coastal: '#E8D5A0',
+  deadlands: '#8A7060',
+  // Legacy aliases for backward compatibility
+  'dense forest': '#7A9E5F',
+  swamp: '#7A8A5A',
   'coast / beach': '#E8D5A0',
   'water / sea': '#7AACCF',
-  tundra: '#D0D8DC',
-  volcanic: '#7A4A3A',
-  ruins: '#B0A090',
+  volcanic: '#8A7060',
+  ruins: '#8A7060',
 };
 
-export const TERRAIN_LIST = Object.keys(TERRAIN_COLORS);
+export const TERRAIN_LIST = ['plains', 'forest', 'farmland', 'hills', 'mountains', 'desert', 'marshes', 'jungle', 'tundra', 'water', 'coastal', 'deadlands'];
 
 export const STATUS_COLORS = {
   unknown: '#888',
@@ -199,10 +207,9 @@ export const STATUS_COLORS = {
 };
 
 export const POI_TYPES = {
-  Settlement: ['Town', 'Village', 'City', 'Hamlet', 'Outpost', 'Fort', 'Castle'],
-  Religious: ['Shrine', 'Temple', 'Monastery', 'Standing Stones', 'Cemetery'],
-  Structure: ['Tower', 'Windmill', 'Lighthouse', 'Bridge', 'Ruin', 'Mine', 'Shack'],
-  Natural: ['Cave', 'Hot Spring', 'Waterfall', 'Ancient Tree', 'Cliff'],
-  Dungeon: ['Dungeon Entrance', 'Lair', 'Tomb', 'Portal'],
-  Other: ['Campsite', 'Battlefield', 'Shipwreck', 'Obelisk'],
+  Settlements: ['Walled City', 'Town', 'Village', 'Homestead', 'Shack', 'Fort', 'Outpost', 'Camp'],
+  Structures: ['Tower', 'Windmill', 'Dam', 'Bridge', 'Statue', 'Shrine or Temple', 'Ruin', 'Graveyard'],
+  Natural: ['Lake', 'Hot Spring', 'Waterfall', 'Ancient Tree', 'Cliff'],
+  Underground: ['Mine', 'Tunnel', 'Tomb', 'Dungeon Entrance', 'Lair', 'Cave', 'Chasm', 'Sinkhole'],
+  Anomalies: ['Portal', 'Rift', 'Monolith', 'Lava Flows', 'Volcano', 'Mystery'],
 };

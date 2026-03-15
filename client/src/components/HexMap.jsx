@@ -110,14 +110,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         <polygon points={corners} fill="rgba(150,130,100,0.55)" />
       )}
 
-      {/* POI icon */}
-      {data?.poi_type && isExplored && (
-        <foreignObject x={cx - 12} y={cy - 16} width={24} height={24}
-          style={{ overflow: 'visible', pointerEvents: 'none' }}>
-          <POIIcon type={data.poi_type} size={22} color="#3D2B1F" />
-        </foreignObject>
-      )}
-
       {/* Hex label */}
       <text
         x={cx}
@@ -132,24 +124,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         {label}
       </text>
 
-      {/* POI name — up to 2 lines, word-wrapped */}
-      {data?.poi_name && isExplored && (() => {
-        const lines = wrapLabel(data.poi_name);
-        return (
-          <text x={cx} textAnchor="middle" fontSize={6.5} fill="#3D2B1F"
-            fontFamily="var(--font-body)" fontStyle="italic"
-            style={{ userSelect: 'none', pointerEvents: 'none' }}>
-            {lines.length === 2 ? (
-              <>
-                <tspan x={cx} y={cy + SIZE * 0.28}>{lines[0]}</tspan>
-                <tspan x={cx} dy="9">{lines[1]}</tspan>
-              </>
-            ) : (
-              <tspan x={cx} y={cy + SIZE * 0.42}>{lines[0]}</tspan>
-            )}
-          </text>
-        );
-      })()}
     </g>
   );
 }
@@ -638,6 +612,38 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
                 filter="url(#danger-glow-filter)"
                 pointerEvents="none"
               />
+            );
+          })}
+
+          {/* POI icons + names — above features and danger glow */}
+          {hexLayout.map(hex => {
+            const data = hexMap[hex.label];
+            const isExplored = data?.explored === 1 || data?.explored === '1' || data?.explored === true;
+            if (!isExplored || (!data?.poi_type && !data?.poi_name)) return null;
+            const lines = data?.poi_name ? wrapLabel(data.poi_name) : null;
+            return (
+              <g key={`poi-top-${hex.label}`} style={{ pointerEvents: 'none' }}>
+                {data?.poi_type && (
+                  <foreignObject x={hex.cx - 12} y={hex.cy - 16} width={24} height={24}
+                    style={{ overflow: 'visible', pointerEvents: 'none' }}>
+                    <POIIcon type={data.poi_type} size={22} color="#3D2B1F" />
+                  </foreignObject>
+                )}
+                {lines && (
+                  <text x={hex.cx} textAnchor="middle" fontSize={6.5} fill="#3D2B1F"
+                    fontFamily="var(--font-body)" fontStyle="italic"
+                    style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                    {lines.length === 2 ? (
+                      <>
+                        <tspan x={hex.cx} y={hex.cy + SIZE * 0.28}>{lines[0]}</tspan>
+                        <tspan x={hex.cx} dy="9">{lines[1]}</tspan>
+                      </>
+                    ) : (
+                      <tspan x={hex.cx} y={hex.cy + SIZE * 0.42}>{lines[0]}</tspan>
+                    )}
+                  </text>
+                )}
+              </g>
             );
           })}
 

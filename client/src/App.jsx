@@ -8,6 +8,39 @@ import HexInfoPanel from './components/HexInfoPanel';
 import HamburgerMenu from './components/HamburgerMenu';
 import { getStoredRole, logout, fetchHexes, fetchMeta, fetchHex, updateHex, fetchMapFeatures, saveMapFeatures as apiSaveMapFeatures } from './utils/api';
 
+const TERRAIN_MIGRATION = {
+  'dense forest': 'forest',
+  swamp: 'marshes',
+  'coast / beach': 'coastal',
+  'water / sea': 'water',
+  volcanic: 'deadlands',
+  ruins: 'deadlands',
+};
+
+const POI_MIGRATION = {
+  City: 'Walled City',
+  Hamlet: 'Village',
+  Castle: 'Fort',
+  Shrine: 'Shrine or Temple',
+  Temple: 'Shrine or Temple',
+  Monastery: 'Shrine or Temple',
+  'Standing Stones': 'Monolith',
+  Cemetery: 'Graveyard',
+  Lighthouse: 'Tower',
+  Campsite: 'Camp',
+  Battlefield: 'Ruin',
+  Shipwreck: 'Ruin',
+  Obelisk: 'Monolith',
+};
+
+function migrateHex(hex) {
+  if (!hex) return hex;
+  const terrain = TERRAIN_MIGRATION[hex.terrain] ?? hex.terrain;
+  const poi_type = POI_MIGRATION[hex.poi_type] ?? hex.poi_type;
+  if (terrain === hex.terrain && poi_type === hex.poi_type) return hex;
+  return { ...hex, terrain, poi_type };
+}
+
 const TITLEBAR_HEIGHT = 48;
 
 export default function App() {
@@ -65,7 +98,7 @@ export default function App() {
     try {
       const mapOwner = role === 'dm' ? viewMode : 'shared';
       const [hexes, m, features] = await Promise.all([fetchHexes(mapOwner), fetchMeta(mapOwner), fetchMapFeatures(mapOwner)]);
-      setHexData(hexes);
+      setHexData(hexes.map(migrateHex));
       setMeta(m);
       setMapFeatures(features || {});
       lastSeenTimestamp.current = m.last_updated ?? null;
@@ -462,14 +495,28 @@ export default function App() {
           onStatusApply={handleStatusApply}
           onClose={() => setRadialMenu(null)}
           role={role}
-          copyLabel={role === 'dm' ? (currentMap === 'dm' ? '← Player' : '← DM') : null}
+          copyLabel={role === 'dm' ? (currentMap === 'dm' ? 'copy from\nplayer map' : 'copy from\nDM map') : null}
           onCopyApply={role === 'dm' ? handleCopyHex : null}
         />
       )}
 
       {/* ─── Edit panel ─── */}
       {editPanel && (
-        <div style={isMobile ? styles.editPanelWrapperMobile : styles.editPanelWrapper}>
+        <div style={isMobile ? styles.editPanelWrapperMobile : {
+          position: 'fixed',
+          left: sidebarOpen ? sidebarWidth : 0,
+          top: TITLEBAR_HEIGHT,
+          bottom: 0,
+          width: 280,
+          zIndex: 498,
+          background: 'var(--parchment)',
+          borderRight: '1.5px solid var(--parchment-dark)',
+          boxShadow: '2px 0 10px rgba(0,0,0,0.12)',
+          overflowY: 'auto',
+          transition: 'left 0.25s ease',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
           <HexEditPanel
             hexLabel={editPanel.hexLabel}
             hexData={editHexData}
@@ -479,6 +526,7 @@ export default function App() {
             role={role}
             mapOwner={currentMap}
             isMobile={isMobile}
+            inSidebar={!isMobile}
           />
         </div>
       )}

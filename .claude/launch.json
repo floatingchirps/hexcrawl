@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dnd-hexmap",
+      "runtimeExecutable": "C:/nvm4w/nodejs/node.exe",
+      "runtimeArgs": ["C:/nvm4w/nodejs/node_modules/npm/bin/npm-cli.js", "run", "dev"],
+      "port": 5173,
+      "cwd": "client"
+    },
+    {
+      "name": "dnd-hexmap-server",
+      "runtimeExecutable": "C:/nvm4w/nodejs/node.exe",
+      "runtimeArgs": ["C:/nvm4w/nodejs/node_modules/npm/bin/npm-cli.js", "start"],
+      "port": 3000
+    }
+  ]
+}

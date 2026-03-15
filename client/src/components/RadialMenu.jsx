@@ -5,24 +5,16 @@ import POIIcon from './POIIcons';
 const SEGMENTS = [
   { id: 'terrain', label: 'Terrain', icon: '⬡', color: '#7A9E5F' },
   { id: 'poi', label: 'POI', icon: '⚑', color: '#D4A017' },
-  { id: 'dangers', label: 'Dangers', icon: '⚠', color: '#8B2020' },
-  { id: 'factions', label: 'Orgs', icon: '⚔', color: '#8B6914' },
-  { id: 'resources', label: 'Resources', icon: '◈', color: '#4A6B3A' },
-  { id: 'rumors', label: 'Rumors', icon: '✉', color: '#6B4C35' },
-  { id: 'history', label: 'Events', icon: '📜', color: '#8B6914' },
   { id: 'status', label: 'Status', icon: '◉', color: '#4A90D9' },
-  { id: 'npcs', label: 'NPCs', icon: '👤', color: '#5A4A8A' },
-  { id: 'notes', label: 'Notes', icon: '✎', color: '#6B4C35' },
-  { id: 'secrets', label: 'Secrets', icon: '🔒', color: '#2A1A0A' },
+  { id: 'dangers', label: 'Dangers', icon: '⚠', color: '#8B2020' },
 ];
 
 const POI_CATEGORY_COLORS = {
-  Settlement: '#8B6914',
-  Religious: '#6B4C8B',
-  Structure: '#4A6B8B',
+  Settlements: '#8B6914',
+  Structures: '#4A6B8B',
   Natural: '#4A8B5A',
-  Dungeon: '#8B2020',
-  Other: '#6B6B6B',
+  Underground: '#8B2020',
+  Anomalies: '#6B4C8B',
 };
 
 const hoverOn = e => {
@@ -68,7 +60,7 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
   const [submenu, setSubmenu] = useState(null);
   const baseSegments = role === 'dm' ? SEGMENTS : SEGMENTS.filter(s => s.id !== 'secrets');
   const segments = copyLabel
-    ? [...baseSegments, { id: 'copy', label: copyLabel, icon: '⇄', color: '#2A6B4A' }]
+    ? [...baseSegments, { id: 'copy', label: copyLabel, icon: null, color: '#2A6B4A' }]
     : baseSegments;
 
   useEffect(() => {
@@ -108,7 +100,7 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
 
   // ── Terrain submenu ──
   if (submenu === 'terrain') {
-    const terrains = TERRAIN_LIST;
+    const terrains = [...TERRAIN_LIST, '_unknown_'];
     const radius = 100, btnSize = 46;
     const menuSize = (radius + btnSize) * 2 + 20;
     const { left, top } = clamp({ x, y }, menuSize);
@@ -121,6 +113,20 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
             ? <BackBtn key="back" bx={pos.bx} by={pos.by} size={btnSize} onClick={() => setSubmenu(null)} />
             : (() => {
                 const t = terrains[i - 1];
+                if (t === '_unknown_') {
+                  return (
+                    <button key="unknown" onClick={() => onTerrainApply(null)} title="Unknown (clear terrain)" style={{
+                      position: 'absolute', left: pos.bx, top: pos.by,
+                      width: btnSize, height: btnSize, borderRadius: '50%',
+                      background: '#C8C0B0', border: '2px solid var(--ink-faded)', color: 'var(--ink)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)', cursor: 'pointer', pointerEvents: 'all',
+                      transition: 'transform 0.1s, box-shadow 0.1s',
+                    }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
+                      <span style={{ fontSize: 7, fontFamily: 'var(--font-heading)', textTransform: 'capitalize', lineHeight: 1.2, textAlign: 'center', padding: '0 2px' }}>Unknown</span>
+                    </button>
+                  );
+                }
                 const color = TERRAIN_COLORS[t] || '#E8D9BC';
                 const label = t.charAt(0).toUpperCase() + t.slice(1);
                 return (
@@ -269,8 +275,14 @@ export default function RadialMenu({ x, y, onSelect, onTerrainApply, onPOIApply,
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)', cursor: 'pointer', pointerEvents: 'all',
             transition: 'transform 0.1s, box-shadow 0.1s', gap: 1,
           }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-            <span style={{ fontSize: 14, lineHeight: 1 }}>{seg.icon}</span>
-            <span style={{ fontSize: 7, fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1, marginTop: 1 }}>{seg.label}</span>
+            {seg.id === 'copy' ? (
+              <span style={{ fontSize: 6.5, fontFamily: 'var(--font-heading)', letterSpacing: '0.03em', textTransform: 'uppercase', lineHeight: 1.4, textAlign: 'center', padding: '0 4px', whiteSpace: 'pre-line' }}>{seg.label}</span>
+            ) : (
+              <>
+                <span style={{ fontSize: 14, lineHeight: 1 }}>{seg.icon}</span>
+                <span style={{ fontSize: 7, fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1, marginTop: 1 }}>{seg.label}</span>
+              </>
+            )}
           </button>
         );
       })}

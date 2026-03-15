@@ -28,8 +28,12 @@ function Panel({ title, onClose, children, isDMPanel, extraStyle }) {
   );
 }
 
-export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role, mapOwner, isMobile }) {
-  const panelExtra = isMobile ? { minWidth: 'unset', maxWidth: 'unset', width: '100%', borderRadius: '12px 12px 0 0', boxShadow: 'none', border: 'none', borderTop: '2px solid var(--gold)' } : {};
+export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, onSave, role, mapOwner, isMobile, inSidebar }) {
+  const panelExtra = isMobile
+    ? { minWidth: 'unset', maxWidth: 'unset', width: '100%', borderRadius: '12px 12px 0 0', boxShadow: 'none', border: 'none', borderTop: '2px solid var(--gold)' }
+    : inSidebar
+    ? { minWidth: 'unset', maxWidth: 'unset', width: '100%', borderRadius: 0, boxShadow: 'none', border: 'none', flex: 1 }
+    : {};
   const [data, setData] = useState(hexData || {});
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
