@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TERRAIN_COLORS, STATUS_COLORS, POI_TYPES } from '../utils/hexGeometry';
 import POIIcon from './POIIcons';
+import { updateHex } from '../utils/api';
 
 // All the sections that can appear in the radial menu
 const ALL_SECTIONS = [
@@ -222,8 +223,20 @@ function SectionContent({ sectionId, data }) {
   }
 }
 
-export default function HexInfoPanel({ hexLabel, hexData, role, onClose, onOpenRadialSection }) {
+export default function HexInfoPanel({ hexLabel, hexData, role, mapOwner, onClose, onOpenRadialSection, onUpdate }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
+
+  async function saveTitle() {
+    try {
+      const result = await updateHex(hexLabel, { poi_name: titleInput, explored: 1 }, mapOwner);
+      onUpdate?.(result);
+      setEditingTitle(false);
+    } catch (err) {
+      console.error('Failed to save title:', err);
+    }
+  }
 
   const data = hexData || {};
   const isExplored = data.explored === 1 || data.explored === '1' || data.explored === true;
@@ -252,7 +265,31 @@ export default function HexInfoPanel({ hexLabel, hexData, role, onClose, onOpenR
       <div style={styles.header}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={styles.hexLabel}>Hex: {hexLabel}</div>
-          {data.poi_name && <div style={styles.poiName}>{data.poi_name}</div>}
+          {editingTitle ? (
+            <div style={{ display: 'flex', gap: 5, marginTop: 4, alignItems: 'center' }}>
+              <input
+                value={titleInput}
+                onChange={e => setTitleInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
+                autoFocus
+                placeholder="Hex name…"
+                style={{ flex: 1, fontSize: 13, padding: '3px 7px', border: '1.5px solid var(--gold)', borderRadius: 3, background: 'var(--parchment-light)', fontFamily: 'var(--font-heading)' }}
+              />
+              <button onClick={saveTitle} style={{ ...styles.closeBtn, color: 'var(--gold-dark)', fontSize: 16 }} title="Save">✓</button>
+              <button onClick={() => setEditingTitle(false)} style={styles.closeBtn} title="Cancel">✕</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <div style={data.poi_name ? styles.poiName : { ...styles.poiName, color: 'var(--ink-faded)', fontStyle: 'italic', fontSize: 13 }}>
+                {data.poi_name || 'Unnamed hex'}
+              </div>
+              <button
+                onClick={() => { setTitleInput(data.poi_name || ''); setEditingTitle(true); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-faded)', fontSize: 13, padding: '0 2px', flexShrink: 0, lineHeight: 1 }}
+                title="Edit name"
+              >✎</button>
+            </div>
+          )}
         </div>
         <button onClick={onClose} style={styles.closeBtn} title="Close panel">✕</button>
       </div>

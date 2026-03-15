@@ -4,17 +4,86 @@ import POIIcon from './POIIcons';
 
 const SIZE = HEX_SIZE;
 
+// ─── Module-level feature rendering (z-ordered layer outside HexTile) ───────
+const FEATURE_STYLES = {
+  road:   { stroke: '#A0897A', width: 4 },
+  river:  { stroke: '#7AACCF', width: 4 },
+  trail:  { stroke: '#8B6914', width: 3, dash: '5,4' },
+  border: { stroke: '#6B3A8B', width: 2.5, dash: '8,3' },
+  wall:   { stroke: '#3D2B1F', width: 5 },
+};
+const FEATURE_Z_ORDER = ['river', 'wall', 'trail', 'border', 'road'];
+
+function hexCorners6(cx, cy) {
+  return Array.from({ length: 6 }, (_, i) => [
+    cx + SIZE * Math.cos((Math.PI / 180) * 60 * i),
+    cy + SIZE * Math.sin((Math.PI / 180) * 60 * i),
+  ]);
+}
+
+function wrapLabel(text) {
+  if (!text) return [text];
+  if (text.length <= 11) return [text];
+  const words = text.trim().split(/\s+/);
+  if (words.length === 1) return [text.slice(0, 10) + '…'];
+  const half = text.length / 2;
+  let cut = 0, best = 1, bestDiff = Infinity;
+  for (let i = 0; i < words.length - 1; i++) {
+    cut += words[i].length + 1;
+    const diff = Math.abs(cut - half);
+    if (diff < bestDiff) { bestDiff = diff; best = i + 1; }
+  }
+  return [words.slice(0, best).join(' '), words.slice(best).join(' ')];
+}
+
+function renderFeaturePath(f, key, corners6, cx, cy, edgeMids) {
+  try {
+    const style = FEATURE_STYLES[f.type] || { stroke: '#888', width: 2 };
+    if (f.from != null && f.to != null) {
+      const from = Math.round(Number(f.from)), to = Math.round(Number(f.to));
+      if (from < 0 || from > 5 || to < 0 || to > 5 || !isFinite(from) || !isFinite(to)) return null;
+      const [x1, y1] = corners6[from], [x2, y2] = corners6[to];
+      const d = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+      return <path key={key} d={d} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} fill="none" strokeLinecap="round" />;
+    }
+    const edges = f.edges || [];
+    if (edges.length < 2) return null;
+    const pts = edges.map(e => edgeMids[e]);
+    if (pts.some(p => !p)) return null;
+    const d = pts.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    return <path key={key} d={d} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} fill="none" strokeLinecap="round" />;
+  } catch { return null; }
+}
+
+// ─── HexTile ─────────────────────────────────────────────────────────────────
 function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onContextMenu, onLongPress, onHover, onHoverEnd, role }) {
   const longPressTimerRef = useRef(null);
   const touchMovedRef = useRef(false);
-  if (!hex) return null;
-  const { cx, cy, label } = hex;
+
+  // Destructure with defaults so hooks below always run (Rules of Hooks)
+  const { cx, cy, label } = hex || { cx: 0, cy: 0, label: '' };
+
+  // Faction tint — hook must be before any conditional return
+  const factions = useMemo(() => {
+    try {
+      const p = JSON.parse(data?.factions || '[]');
+      return Array.isArray(p) ? p : [];
+    } catch { return []; }
+  }, [data?.factions]);
+
+  // Dangers — hook must be before any conditional return
+  const dangers = useMemo(() => {
+    try {
+      const p = JSON.parse(data?.dangers || '[]');
+      return Array.isArray(p) ? p : [];
+    } catch { return []; }
+  }, [data?.dangers]);
+
+  if (!hex) return null; // safe: all hooks already called above
 
   const terrain = data?.terrain;
   const fillColor = terrain ? (TERRAIN_COLORS[terrain] || '#E8D9BC') : '#E8D9BC';
   const explored = data?.explored;
-  const status = data?.status || 'unknown';
-  const statusColor = STATUS_COLORS[status] || '#888';
   const isExplored = explored === 1 || explored === '1' || explored === true;
 
   // Hide completely transparent hexes (too far from any terrain)
@@ -22,82 +91,12 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
   if (opacity <= 0 && !isSelected) return null;
 
   const corners = hexCornerPoints(cx, cy);
-
-  // Feature lines
-  const features = useMemo(() => {
-    try {
-      const p = JSON.parse(data?.features || '[]');
-      return Array.isArray(p) ? p : [];
-    } catch { return []; }
-  }, [data?.features]);
-
-  const edgeMidpoints = hexEdgeMidpoints(cx, cy, SIZE);
-
-  function renderFeature(f, i) {
-    try {
-      let stroke = '#8B6914', width = 3, dashArray = null;
-      if (f.type === 'road') { stroke = '#A0897A'; width = 4; }
-      else if (f.type === 'river') { stroke = '#7AACCF'; width = 4; }
-      else if (f.type === 'trail') { stroke = '#8B6914'; width = 3; dashArray = '5,4'; }
-      else if (f.type === 'wall') { stroke = '#3D2B1F'; width = 5; }
-
-      // Corner-to-corner format: straight line
-      if (f.from != null && f.to != null) {
-        const from = Math.round(Number(f.from));
-        const to = Math.round(Number(f.to));
-        if (from < 0 || from > 5 || to < 0 || to > 5 || !isFinite(from) || !isFinite(to)) return null;
-        const c1 = corners6[from], c2 = corners6[to];
-        if (!c1 || !c2) return null;
-        const [x1, y1] = c1, [x2, y2] = c2;
-        const pathD = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
-        return <path key={i} d={pathD} stroke={stroke} strokeWidth={width} strokeDasharray={dashArray} fill="none" strokeLinecap="round" />;
-      }
-
-      // Legacy edge-midpoint format
-      const edges = f.edges || [];
-      if (edges.length < 2) return null;
-      const points = edges.map(e => edgeMidpoints[e]);
-      if (points.some(p => !p)) return null;
-      const pathD = points.map((p, j) => `${j === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-      return <path key={i} d={pathD} stroke={stroke} strokeWidth={width} strokeDasharray={dashArray} fill="none" strokeLinecap="round" />;
-    } catch { return null; }
-  }
-
-  // Faction tint
-  const factions = useMemo(() => {
-    try {
-      const p = JSON.parse(data?.factions || '[]');
-      return Array.isArray(p) ? p : [];
-    } catch { return []; }
-  }, [data?.factions]);
   const factionColor = factions[0]?.color;
 
-  // Dangers — compute max severity for glow
-  const dangers = useMemo(() => {
-    try {
-      const p = JSON.parse(data?.dangers || '[]');
-      return Array.isArray(p) ? p : [];
-    } catch { return []; }
-  }, [data?.dangers]);
   const SEVERITY_LEVELS = { Minor: 1, Moderate: 2, Severe: 3, Deadly: 4 };
   const maxSeverity = dangers.reduce((max, d) => Math.max(max, SEVERITY_LEVELS[d.severity] || 0), 0);
-  // Glow radius as fraction of hex size: Minor=0.2, Moderate=0.4, Severe=0.6, Deadly=0.85
   const dangerGlowRadius = maxSeverity > 0 ? [0, 0.2, 0.4, 0.6, 0.85][maxSeverity] : 0;
   const dangerGlowId = dangerGlowRadius > 0 ? `danger-glow-${label.replace(/[^a-zA-Z0-9]/g, '_')}` : null;
-
-  // Corner positions for badge
-  const corners6 = useMemo(() => {
-    const r = SIZE;
-    const pts = [];
-    for (let i = 0; i < 6; i++) {
-      pts.push([cx + r * Math.cos((Math.PI/180)*60*i), cy + r * Math.sin((Math.PI/180)*60*i)]);
-    }
-    return pts;
-  }, [cx, cy]);
-
-  // Top-right corner area for status badge
-  const badgeX = corners6[5] ? corners6[5][0] - 2 : cx + SIZE * 0.7;
-  const badgeY = corners6[5] ? corners6[5][1] + 5 : cy - SIZE * 0.7;
 
   // Selection stroke
   const strokeColor = isSelected ? '#D4A017' : isCenter ? '#D4A017' : (isExplored ? 'rgba(139,105,20,0.25)' : 'rgba(196,176,144,0.35)');
@@ -165,9 +164,6 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         </foreignObject>
       )}
 
-      {/* Feature lines */}
-      {isExplored && features.map(renderFeature)}
-
       {/* Hex label */}
       <text
         x={cx}
@@ -182,19 +178,29 @@ function HexTile({ hex, data, isCenter, isSelected, fadeOpacity, onSelect, onCon
         {label}
       </text>
 
-      {/* POI name (tiny, if exists) */}
-      {data?.poi_name && isExplored && (
-        <text x={cx} y={cy + SIZE * 0.45} textAnchor="middle"
-          fontSize={6.5} fill="#3D2B1F" fontFamily="var(--font-body)"
-          fontStyle="italic" style={{ userSelect: 'none', pointerEvents: 'none' }}>
-          {data.poi_name.length > 10 ? data.poi_name.slice(0, 9) + '…' : data.poi_name}
-        </text>
-      )}
+      {/* POI name — up to 2 lines, word-wrapped */}
+      {data?.poi_name && isExplored && (() => {
+        const lines = wrapLabel(data.poi_name);
+        return (
+          <text x={cx} textAnchor="middle" fontSize={6.5} fill="#3D2B1F"
+            fontFamily="var(--font-body)" fontStyle="italic"
+            style={{ userSelect: 'none', pointerEvents: 'none' }}>
+            {lines.length === 2 ? (
+              <>
+                <tspan x={cx} y={cy + SIZE * 0.28}>{lines[0]}</tspan>
+                <tspan x={cx} dy="9">{lines[1]}</tspan>
+              </>
+            ) : (
+              <tspan x={cx} y={cy + SIZE * 0.42}>{lines[0]}</tspan>
+            )}
+          </text>
+        );
+      })()}
     </g>
   );
 }
 
-export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile, onHexSelect, onHexDeselect, onHexContextMenu }) {
+export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile, centerTrigger, onHexSelect, onHexDeselect, onHexContextMenu }) {
   const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -319,22 +325,24 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
   // Re-fit when ring count changes
   useEffect(() => { fitToCanvas(); }, [ringCount, fitToCanvas]);
 
-  // On mobile: center the map on the selected hex, accounting for the 40vh bottom sheet
+  // Center on selected hex: always on mobile, or when centerTrigger fires (e.g. search)
+  const prevCenterTrigger = useRef(centerTrigger);
   useEffect(() => {
-    if (!isMobile || !selectedHex || !svgRef.current) return;
+    const isExplicit = centerTrigger !== prevCenterTrigger.current;
+    prevCenterTrigger.current = centerTrigger;
+    if (!selectedHex || !svgRef.current) return;
+    if (!isMobile && !isExplicit) return; // desktop: only center on explicit trigger
     const hex = hexLayout.find(h => h.label === selectedHex);
     if (!hex) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const bottomPanelH = window.innerHeight * 0.4; // 40vh matches bottomSheet height
+    const bottomPanelH = isMobile ? window.innerHeight * 0.4 : 0;
     const visibleH = window.innerHeight - rect.top - bottomPanelH;
-    const targetX = rect.width / 2;
-    const targetY = visibleH / 2;
     setTransform(t => ({
       ...t,
-      x: targetX - hex.cx * t.scale,
-      y: targetY - hex.cy * t.scale,
+      x: rect.width / 2 - hex.cx * t.scale,
+      y: visibleH / 2 - hex.cy * t.scale,
     }));
-  }, [selectedHex, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedHex, isMobile, centerTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pan: right-click drag (button 2) or middle-click drag (button 1)
   function handleMouseDown(e) {
@@ -368,6 +376,7 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
 
   function handleWheel(e) {
     e.preventDefault();
+    if (!svgRef.current) return;
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const rect = svgRef.current.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -402,13 +411,16 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
       e.preventDefault();
       if (e.touches.length === 1 && touchStartRef.current) {
         const t = e.touches[0];
-        const dx = t.clientX - touchStartRef.current.x;
-        const dy = t.clientY - touchStartRef.current.y;
+        // Capture ref values immediately — the functional updater runs async so
+        // touchStartRef.current could be null by then (touchend race condition)
+        const { x: startX, y: startY, tx: startTX, ty: startTY } = touchStartRef.current;
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
         if (Math.abs(dx) > 5 || Math.abs(dy) > 5) setDidDrag(true);
         setTransform(tr => ({
           ...tr,
-          x: touchStartRef.current.tx + dx,
-          y: touchStartRef.current.ty + dy,
+          x: startTX + dx,
+          y: startTY + dy,
         }));
       } else if (e.touches.length === 2 && lastTouchDist.current) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -500,6 +512,28 @@ export default function HexMap({ hexData, ringCount, role, selectedHex, isMobile
               role={role}
             />
           ))}
+
+          {/* Feature layer — rendered after ALL tiles so features always appear on top.
+              Ordered by type so roads > borders > trails > walls > rivers (z-order). */}
+          {FEATURE_Z_ORDER.map(type =>
+            hexLayout.flatMap(hex => {
+              const data = hexMap[hex.label];
+              if (!data?.explored) return [];
+              let features;
+              try { features = JSON.parse(data.features || '[]'); } catch { return []; }
+              if (!Array.isArray(features)) return [];
+              return features
+                .filter(f => f.type === type)
+                .map((f, i) => renderFeaturePath(
+                  f,
+                  `${hex.label}-${type}-${i}`,
+                  hexCorners6(hex.cx, hex.cy),
+                  hex.cx, hex.cy,
+                  hexEdgeMidpoints(hex.cx, hex.cy, SIZE)
+                ))
+                .filter(Boolean);
+            })
+          )}
         </g>
       </svg>
 

@@ -49,7 +49,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   const [newEvent, setNewEvent] = useState({ session: '', text: '' });
   const [featureType, setFeatureType] = useState('road');
   const [pendingCorner, setPendingCorner] = useState(null);
-  const poiSaveTimerRef = useRef(null);
+  const [poiNameInput, setPoiNameInput] = useState(hexData?.poi_name || '');
 
   useEffect(() => {
     setData(hexData || {});
@@ -64,6 +64,7 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
     setNewEvent({ session: '', text: '' });
     setLoreTab('edit');
     setPendingCorner(null);
+    setPoiNameInput(hexData?.poi_name || '');
   }, [hexData, hexLabel, panelType]);
 
   async function save(updates) {
@@ -115,19 +116,19 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   if (panelType === 'poi') {
     return (
       <Panel title="Point of Interest" onClose={onClose} extraStyle={panelExtra}>
-        <input
-          placeholder="POI name (optional)"
-          value={data.poi_name || ''}
-          onChange={e => {
-            const name = e.target.value;
-            setData(d => ({ ...d, poi_name: name }));
-            clearTimeout(poiSaveTimerRef.current);
-            poiSaveTimerRef.current = setTimeout(() => {
-              save({ poi_name: name });
-            }, 600);
-          }}
-          style={styles.input}
-        />
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <input
+            placeholder="POI name (optional)"
+            value={poiNameInput}
+            onChange={e => setPoiNameInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && save({ poi_type: data.poi_type, poi_name: poiNameInput })}
+            style={{ ...styles.input, flex: 1, marginBottom: 0 }}
+          />
+          <button
+            onClick={() => save({ poi_type: data.poi_type, poi_name: poiNameInput })}
+            style={{ ...styles.clearBtn, marginTop: 0, whiteSpace: 'nowrap', padding: '0 10px' }}
+          >Save</button>
+        </div>
         <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 8 }}>
           {Object.entries(POI_TYPES).map(([cat, types]) => (
             <div key={cat}>
@@ -159,9 +160,9 @@ export default function HexEditPanel({ hexLabel, hexData, panelType, onClose, on
   // ---- Features ----
   if (panelType === 'features') {
     const features = parseJSON(data.features, []);
-    const FEATURE_COLORS = { road: '#A0897A', river: '#7AACCF', trail: '#8B6914', wall: '#3D2B1F' };
-    const FEATURE_DASHES = { trail: '4,3' };
-    const FEATURE_WIDTHS = { road: 2.5, river: 2.5, trail: 1.5, wall: 3 };
+    const FEATURE_COLORS = { road: '#A0897A', river: '#7AACCF', trail: '#8B6914', border: '#6B3A8B', wall: '#3D2B1F' };
+    const FEATURE_DASHES = { trail: '4,3', border: '8,3' };
+    const FEATURE_WIDTHS = { road: 2.5, river: 2.5, trail: 1.5, border: 2, wall: 3 };
     const CORNER_LABELS = ['R', 'BR', 'BL', 'L', 'TL', 'TR'];
     const CORNER_NAMES = ['Right', 'Bot-Right', 'Bot-Left', 'Left', 'Top-Left', 'Top-Right'];
     // Label offsets relative to each corner: [dx, dy, textAnchor]

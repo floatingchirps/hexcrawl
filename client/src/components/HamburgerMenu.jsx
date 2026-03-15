@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { addRing, removeRing, exportJSON, resetMap } from '../utils/api';
+import { addRing, removeRing, exportJSON, resetMap, updateMeta } from '../utils/api';
 
-export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange, onLogout }) {
+export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange, onLogout, meta, onMetaChange }) {
   const [open, setOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(null);
   const [resetStep, setResetStep] = useState(0); // 0=none, 1=first warning, 2=final warning
+  const [editingMapName, setEditingMapName] = useState(false);
+  const [mapNameInput, setMapNameInput] = useState('');
   const ref = useRef(null);
 
   useEffect(() => {
@@ -42,6 +44,16 @@ export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange,
     setOpen(false);
   }
 
+  async function saveMapName() {
+    try {
+      await updateMeta({ map_name: mapNameInput }, viewMode);
+      onMetaChange?.();
+      setEditingMapName(false);
+    } catch (err) {
+      console.error('Failed to save map name:', err);
+    }
+  }
+
   async function handleDownloadBackup() {
     await exportJSON(viewMode);
   }
@@ -71,6 +83,27 @@ export default function HamburgerMenu({ role, viewMode = 'shared', onRingChange,
           <div style={styles.section}>Map Rings</div>
           <MenuItem icon="+" label="Add Ring" onClick={handleAddRing} />
           {role === 'dm' && <MenuItem icon="−" label="Remove Outer Ring" onClick={handleRemoveRing} />}
+
+          {role === 'dm' && <>
+            <div style={styles.section}>Map Settings</div>
+            {editingMapName ? (
+              <div style={{ padding: '4px 12px 8px' }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    value={mapNameInput}
+                    onChange={e => setMapNameInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveMapName(); if (e.key === 'Escape') setEditingMapName(false); }}
+                    autoFocus
+                    placeholder="Map name…"
+                    style={{ flex: 1, padding: '5px 8px', fontSize: 13, border: '1.5px solid var(--gold)', borderRadius: 3, fontFamily: 'var(--font-body)', background: 'var(--parchment-light)' }}
+                  />
+                  <button onClick={saveMapName} style={{ ...styles.cancelBtn, flex: 'none', borderColor: 'var(--gold)', color: 'var(--gold-dark)' }}>✓</button>
+                </div>
+              </div>
+            ) : (
+              <MenuItem icon="✎" label={meta?.map_name ? `Rename: ${meta.map_name}` : 'Set Map Name'} onClick={() => { setMapNameInput(meta?.map_name || ''); setEditingMapName(true); }} />
+            )}
+          </>}
 
           <div style={styles.section}>Export</div>
           <MenuItem icon="⎙" label="Export as PNG (Print)" onClick={handlePrint} />

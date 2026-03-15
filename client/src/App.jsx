@@ -27,6 +27,9 @@ export default function App() {
   const [radialMenu, setRadialMenu] = useState(null); // { x, y, hexLabel }
   // Edit panel state — opened from radial menu or info panel
   const [editPanel, setEditPanel] = useState(null); // { hexLabel, panelType }
+  // Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [centerTrigger, setCenterTrigger] = useState(0);
 
   // Mobile detection
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -106,6 +109,44 @@ export default function App() {
 
   // Current map owner for API calls
   const currentMap = role === 'dm' ? viewMode : 'shared';
+
+  // Search results — filter hexData by query string across key fields
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const results = [];
+    for (const hex of hexData) {
+      const matches = [];
+      function checkField(rawValue, fieldName) {
+        if (!rawValue) return;
+        const text = typeof rawValue === 'string' ? rawValue : JSON.stringify(rawValue);
+        const idx = text.toLowerCase().indexOf(q);
+        if (idx !== -1) {
+          const s = Math.max(0, idx - 18), e = Math.min(text.length, idx + q.length + 18);
+          matches.push({ field: fieldName, snippet: (s > 0 ? '…' : '') + text.slice(s, e) + (e < text.length ? '…' : '') });
+        }
+      }
+      checkField(hex.label, 'Coords');
+      checkField(hex.poi_name, 'Name');
+      checkField(hex.terrain, 'Terrain');
+      checkField(hex.poi_type, 'POI');
+      checkField(hex.notes, 'Notes');
+      checkField(hex.history_lore, 'History');
+      checkField(hex.rumors, 'Rumors');
+      checkField(hex.npcs, 'NPCs');
+      checkField(hex.dangers, 'Dangers');
+      if (role === 'dm') checkField(hex.secrets, 'Secrets');
+      if (matches.length) results.push({ hex, matches });
+    }
+    return results.slice(0, 8);
+  }, [searchQuery, hexData, role]);
+
+  function handleSearchResultClick(label) {
+    setSelectedHex(label);
+    setSidebarOpen(true);
+    setSearchQuery('');
+    setCenterTrigger(t => t + 1);
+  }
 
   // Left-click on a hex selects it and opens sidebar
   function handleHexSelect(label) {
@@ -253,13 +294,43 @@ export default function App() {
             {sidebarOpen ? '✕' : '☰'}
           </button>
           {!isMobile && (
-            <input
-              type="text"
-              placeholder="Search…"
-              style={styles.searchInput}
-              readOnly
-              title="Search (coming soon)"
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Search hexes…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Escape' && setSearchQuery('')}
+                style={styles.searchInput}
+              />
+              {searchResults.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 2,
+                  background: 'var(--parchment)', border: '1.5px solid var(--ink-faded)',
+                  borderRadius: 4, boxShadow: '0 4px 18px rgba(0,0,0,0.35)',
+                  maxHeight: 280, overflowY: 'auto', zIndex: 900,
+                }}>
+                  {searchResults.map(({ hex, matches }) => (
+                    <button key={hex.label} onClick={() => handleSearchResultClick(hex.label)} style={{
+                      display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left',
+                      background: 'none', border: 'none', borderBottom: '1px solid var(--parchment-dark)',
+                      cursor: 'pointer', fontFamily: 'var(--font-body)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--ink-faded)' }}>{hex.label}</span>
+                        {hex.poi_name && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{hex.poi_name}</span>}
+                      </div>
+                      {matches.slice(0, 2).map((m, i) => (
+                        <div key={i} style={{ fontSize: 11, color: 'var(--ink-light)', marginTop: 1 }}>
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 9, letterSpacing: '0.1em', color: 'var(--gold-dark)', textTransform: 'uppercase' }}>{m.field}: </span>
+                          {m.snippet}
+                        </div>
+                      ))}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -298,7 +369,7 @@ export default function App() {
               {isMobile ? (isDMView ? '⚑' : '🗝') : (isDMView ? '⚑ Player Map' : '🗝 DM Map')}
             </button>
           )}
-          <HamburgerMenu role={role} viewMode={viewMode} onRingChange={handleRingChange} onLogout={handleLogout} />
+          <HamburgerMenu role={role} viewMode={viewMode} onRingChange={handleRingChange} onLogout={handleLogout} meta={meta} onMetaChange={loadAll} />
         </div>
       </div>
 
@@ -316,8 +387,10 @@ export default function App() {
             hexLabel={selectedHex}
             hexData={selectedHexData}
             role={role}
+            mapOwner={currentMap}
             onClose={() => setSelectedHex(null)}
             onOpenRadialSection={handleOpenRadialSection}
+            onUpdate={updatedHex => setHexData(prev => prev.map(h => h.label === updatedHex.label ? updatedHex : h))}
           />
         ) : (
           <div style={styles.sidebarEmpty}>
@@ -357,6 +430,7 @@ export default function App() {
           role={role}
           selectedHex={selectedHex}
           isMobile={isMobile}
+          centerTrigger={centerTrigger}
           onHexSelect={handleHexSelect}
           onHexDeselect={handleHexDeselect}
           onHexContextMenu={handleHexContextMenu}
