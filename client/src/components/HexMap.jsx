@@ -43,7 +43,7 @@ function renderFeaturePath(f, key, corners6, cx, cy, edgeMids) {
       const from = Math.round(Number(f.from)), to = Math.round(Number(f.to));
       if (from < 0 || from > 5 || to < 0 || to > 5 || !isFinite(from) || !isFinite(to)) return null;
       const [x1, y1] = corners6[from], [x2, y2] = corners6[to];
-      const d = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+      const d = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
       return <path key={key} d={d} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} fill="none" strokeLinecap="round" />;
     }
     const edges = f.edges || [];
